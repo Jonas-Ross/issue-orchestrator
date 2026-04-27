@@ -4,6 +4,7 @@ import { activeId, sessions } from "./sessions";
 import { closePicker, openPicker, pickerOpen } from "./picker";
 import { closePalette, paletteOpen, togglePalette } from "./palette";
 import { closeContextMenu, contextMenu } from "./context-menu";
+import { toggleSidebar } from "./sidebar";
 
 /// App-wide keyboard shortcuts. Installed once on the window in capture
 /// phase so Cmd-modified events are handled before xterm sees them.
@@ -44,8 +45,21 @@ export function useKeymap() {
         action();
       };
 
-      switch (e.key) {
+      // Cmd+Shift+B → debug bash tab
+      if (e.shiftKey && e.key.toLowerCase() === "b") {
+        return handle(() => {
+          void commands.ptySpawn(80, 24);
+        });
+      }
+
+      switch (e.key.toLowerCase()) {
+        case "n":
+          return handle(() => {
+            closePalette();
+            openPicker();
+          });
         case "t":
+          // legacy alias for ⌘N
           return handle(() => {
             closePalette();
             openPicker();
@@ -57,6 +71,8 @@ export function useKeymap() {
           });
         case "k":
           return handle(() => togglePalette());
+        case "b":
+          return handle(() => toggleSidebar());
         case "]":
           return handle(() => {
             if (list.length === 0) return;
