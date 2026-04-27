@@ -3,6 +3,7 @@ name = "issue-orchestrator"
 version = "0.1.0"
 edition = "2021"
 description = "Embedded terminal app for managing Claude Code issue-team sessions"
+default-run = "issue-orchestrator"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
