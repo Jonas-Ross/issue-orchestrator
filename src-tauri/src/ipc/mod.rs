@@ -1,15 +1,23 @@
 pub mod events;
 
+use std::path::PathBuf;
+use std::sync::Mutex;
+
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
+use crate::config::Config;
 use crate::registry::{RegistryCmd, RegistryEvent, SessionId, SessionSummary, SpawnSpec};
 
-/// Tauri-managed state — just the actor's mailbox.
+/// Tauri-managed state — actor mailbox plus paths/config the IPC layer
+/// needs to expose to the frontend.
 pub struct AppState {
     pub registry: mpsc::Sender<RegistryCmd>,
+    pub config_path: PathBuf,
+    pub hook_script_path: PathBuf,
+    pub config: Mutex<Config>,
 }
 
 /// Bridge: drains domain events from the actor and re-emits them as the
@@ -126,4 +134,39 @@ pub async fn list_sessions(
         .await
         .map_err(|e| e.to_string())?;
     rx.await.map_err(|e| e.to_string())
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupState {
+    pub setup_done: bool,
+    pub hook_script_path: String,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_setup_state(state: State<'_, AppState>) -> Result<SetupState, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    Ok(SetupState {
+        setup_done: config.setup_done,
+        hook_script_path: state.hook_script_path.display().to_string(),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn mark_setup_done(state: State<'_, AppState>) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    if config.setup_done {
+        return Ok(());
+    }
+    config.setup_done = true;
+    config.save(&state.config_path).map_err(Into::into)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_config(state: State<'_, AppState>) -> Result<Config, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    Ok(config.clone())
 }

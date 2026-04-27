@@ -1,10 +1,16 @@
+pub mod config;
 pub mod error;
+pub mod hooks;
 pub mod ipc;
+pub mod paths;
 pub mod pty;
 pub mod registry;
 
+use std::sync::Mutex;
+
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events, Builder};
+use tracing::{error, info, warn};
 
 pub use error::{Error, Result};
 
@@ -21,6 +27,9 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::pty_resize,
             ipc::pty_kill,
             ipc::list_sessions,
+            ipc::get_setup_state,
+            ipc::mark_setup_done,
+            ipc::get_config,
         ])
         .events(collect_events![
             ipc::events::PtyData,
@@ -32,7 +41,23 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
 
 pub fn run() {
     init_tracing();
-    tracing::info!("starting issue-orchestrator");
+    info!("starting issue-orchestrator");
+
+    let config_path = paths::config_path().expect("compute config path");
+    let sock_path = paths::hooks_socket_path().expect("compute hooks socket path");
+    let log_path = paths::hooks_log_path().expect("compute hooks log path");
+    let hook_script_path = paths::hook_script_path().expect("compute hook script path");
+
+    if let Err(e) = hooks::script::ensure_hook_script(&hook_script_path) {
+        warn!(?e, "failed to write hook script");
+    } else {
+        info!(path = %hook_script_path.display(), "hook script ready");
+    }
+
+    let config = config::Config::load_or_default(&config_path).unwrap_or_else(|e| {
+        warn!(?e, "config load failed; using defaults");
+        config::Config::default()
+    });
 
     let builder = make_specta_builder();
 
@@ -45,8 +70,22 @@ pub fn run() {
             let registry_tx = registry::SessionRegistryActor::spawn(event_tx);
             ipc::spawn_event_bridge(app.handle().clone(), event_rx);
 
+            let registry_for_hooks = registry_tx.clone();
+            let sock_for_hooks = sock_path.clone();
+            let log_for_hooks = log_path.clone();
+            tokio::spawn(async move {
+                if let Err(e) =
+                    hooks::run_listener(sock_for_hooks, log_for_hooks, registry_for_hooks).await
+                {
+                    error!(?e, "hook listener exited");
+                }
+            });
+
             app.manage(ipc::AppState {
                 registry: registry_tx,
+                config_path: config_path.clone(),
+                hook_script_path: hook_script_path.clone(),
+                config: Mutex::new(config.clone()),
             });
 
             Ok(())

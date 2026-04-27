@@ -15,6 +15,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
+use crate::hooks::HookEvent;
 use crate::pty::{self, PtyEvent};
 
 use self::session::Session;
@@ -74,6 +75,11 @@ pub enum RegistryCmd {
     List {
         reply: oneshot::Sender<Vec<SessionSummary>>,
     },
+    /// A Claude Code hook fired through the M3 UDS listener. Routed to
+    /// the session whose id matches the hook's `session_orch_id`. Hooks
+    /// for sessions we didn't spawn are silently dropped (no orch id
+    /// means no correlation).
+    HookEvent(HookEvent),
 }
 
 /// Domain events the actor publishes. A Tauri-aware bridge subscribes to
@@ -145,9 +151,43 @@ impl SessionRegistryActor {
                 RegistryCmd::List { reply } => {
                     let _ = reply.send(self.snapshot());
                 }
+                RegistryCmd::HookEvent(evt) => self.handle_hook(evt),
             }
         }
         info!("session registry actor stopped");
+    }
+
+    fn handle_hook(&mut self, evt: HookEvent) {
+        let Some(orch_id) = evt.session_orch_id.as_deref() else {
+            return;
+        };
+        let Some(session) = self.sessions.get_mut(orch_id) else {
+            warn!(orch_id, event = %evt.hook_event_name, "hook for unknown session");
+            return;
+        };
+        if let Some(claude_id) = &evt.claude_session_id {
+            session.claude_session_id = Some(claude_id.clone());
+        }
+        let new_status = match evt.hook_event_name.as_str() {
+            "SessionStart" => Status::Running,
+            "Notification" => Status::NeedsInput,
+            "Stop" => Status::Idle,
+            "SessionEnd" => Status::Exited,
+            _ => return,
+        };
+        if session.status == new_status {
+            return;
+        }
+        session.status = new_status;
+        let session_id = session.id.clone();
+        info!(session_id = %session_id, ?new_status, "hook updated session status");
+        emit(
+            &self.events,
+            RegistryEvent::StatusChange {
+                session_id,
+                status: new_status,
+            },
+        );
     }
 
     fn handle_spawn(
