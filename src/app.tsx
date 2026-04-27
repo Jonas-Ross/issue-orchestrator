@@ -7,8 +7,15 @@ import { TabStrip } from "./components/TabStrip";
 import { TerminalArea } from "./components/TerminalArea";
 import { SetupPanel } from "./components/SetupPanel";
 import { IssuePicker } from "./components/IssuePicker";
+import { ContextMenu } from "./components/ContextMenu";
+import { CommandPalette } from "./components/CommandPalette";
+import { useKeymap } from "./state/keymap";
+import { useNotifications } from "./state/notifications";
 
 export function App() {
+  useKeymap();
+  useNotifications();
+
   useEffect(() => {
     startPtyStream();
 
@@ -50,7 +57,9 @@ export function App() {
       <TabStrip />
       <TerminalArea />
       <IssuePicker />
+      <CommandPalette />
       <SetupPanel />
+      <ContextMenu />
     </div>
   );
 }
