@@ -16,8 +16,20 @@ if [ ! -S "$sock" ]; then
 fi
 
 payload=$(cat)
-if [ -n "${ISSUE_ORCH_SESSION_ID:-}" ] && command -v jq >/dev/null 2>&1; then
-  payload=$(echo "$payload" | jq --arg orch_id "$ISSUE_ORCH_SESSION_ID" '. + {session_orch_id: $orch_id}')
-fi
 
-echo "$payload" | nc -U "$sock" -w 1 2>/dev/null || true
+# Always emit compact one-line JSON. Claude Code pretty-prints the hook
+# payload, so without jq -c the listener sees ~10 separate lines per
+# event and can't parse any of them. jq does both compaction and the
+# optional session_orch_id annotation in a single pass.
+if command -v jq >/dev/null 2>&1; then
+  printf '%s' "$payload" \
+    | jq -c --arg orch_id "${ISSUE_ORCH_SESSION_ID:-}" \
+        'if $orch_id == "" then . else . + {session_orch_id: $orch_id} end' \
+    | nc -U "$sock" -w 1 2>/dev/null || true
+else
+  # No jq → degraded mode. Listener still tolerates multi-line JSON
+  # (it reads the whole connection and lets serde_json stream values),
+  # but the orch_id annotation is skipped so non-orch hooks won't
+  # correlate.
+  printf '%s' "$payload" | nc -U "$sock" -w 1 2>/dev/null || true
+fi

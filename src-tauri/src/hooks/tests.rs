@@ -48,14 +48,16 @@ async fn wait_for_status_change(
 }
 
 async fn send_hook(sock: &std::path::Path, payload: serde_json::Value) {
+    send_hook_bytes(sock, serde_json::to_vec(&payload).expect("serialize payload")).await
+}
+
+async fn send_hook_bytes(sock: &std::path::Path, bytes: Vec<u8>) {
     // The listener may not be ready immediately after run_listener returns;
     // retry connect briefly.
     let mut last_err = None;
     for _ in 0..20 {
         match UnixStream::connect(sock).await {
             Ok(mut stream) => {
-                let mut bytes = serde_json::to_vec(&payload).expect("serialize payload");
-                bytes.push(b'\n');
                 stream.write_all(&bytes).await.expect("write payload");
                 stream.shutdown().await.ok();
                 return;
@@ -126,6 +128,38 @@ async fn hook_routes_status_change_to_session() {
         "expected at least 2 audit lines, got {}",
         lines.len()
     );
+}
+
+#[tokio::test]
+async fn pretty_printed_hook_payload_parses() {
+    let dir = tempdir().expect("tempdir");
+    let sock = dir.path().join("hooks.sock");
+    let log = dir.path().join("events.jsonl");
+
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let cmd_tx = SessionRegistryActor::spawn(event_tx);
+
+    {
+        let sock = sock.clone();
+        let log = log.clone();
+        let cmd_tx = cmd_tx.clone();
+        tokio::spawn(async move {
+            let _ = run_listener(sock, log, cmd_tx).await;
+        });
+    }
+
+    let summary = spawn_bash(&cmd_tx).await;
+
+    // Mimic Claude Code's pretty-printed payload (newlines between fields)
+    // — what the listener sees when jq isn't on the hook script's PATH.
+    let pretty = format!(
+        "{{\n  \"hook_event_name\": \"Notification\",\n  \"session_id\": \"claude-1\",\n  \"session_orch_id\": \"{}\",\n  \"cwd\": \"/tmp\"\n}}\n",
+        summary.id
+    );
+    send_hook_bytes(&sock, pretty.into_bytes()).await;
+
+    let status = wait_for_status_change(&mut event_rx, &summary.id).await;
+    assert_eq!(status, Status::NeedsInput);
 }
 
 #[tokio::test]

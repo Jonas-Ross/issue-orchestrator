@@ -7,7 +7,7 @@ mod tests;
 use std::path::PathBuf;
 
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::AsyncReadExt;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -88,40 +88,49 @@ pub async fn run_listener(
 }
 
 async fn handle_connection(
-    stream: tokio::net::UnixStream,
+    mut stream: tokio::net::UnixStream,
     registry: mpsc::Sender<RegistryCmd>,
     logger: Logger,
 ) {
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    loop {
-        line.clear();
-        match reader.read_line(&mut line).await {
-            Ok(0) => return,
-            Ok(_) => {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    continue;
+    let mut bytes = Vec::with_capacity(4096);
+    if let Err(e) = stream.read_to_end(&mut bytes).await {
+        warn!(?e, "hook connection read failed");
+        return;
+    }
+    if bytes.iter().all(u8::is_ascii_whitespace) {
+        return;
+    }
+
+    // serde_json's streaming Deserializer handles both compact one-line
+    // payloads (the hook.sh happy path) and pretty-printed multi-line
+    // ones (Claude Code's raw payload, which lands here when jq isn't
+    // installed). It also tolerates multiple JSON values per connection,
+    // which keeps the protocol forward-compatible.
+    let mut stream = serde_json::Deserializer::from_slice(&bytes).into_iter::<Value>();
+    while let Some(result) = stream.next() {
+        match result {
+            Ok(value) => {
+                if let Err(e) = logger.append(&value) {
+                    warn!(?e, "failed to append hook event to log");
                 }
-                match serde_json::from_str::<Value>(trimmed) {
-                    Ok(value) => {
-                        if let Err(e) = logger.append(&value) {
-                            warn!(?e, "failed to append hook event to log");
-                        }
-                        if let Some(evt) = HookEvent::from_value(value) {
-                            if let Err(e) = registry.send(RegistryCmd::HookEvent(evt)).await {
-                                warn!(?e, "failed to forward hook event to registry");
-                            }
-                        } else {
-                            warn!(line = %trimmed, "hook event missing hook_event_name");
+                match HookEvent::from_value(value) {
+                    Some(evt) => {
+                        if let Err(e) = registry.send(RegistryCmd::HookEvent(evt)).await {
+                            warn!(?e, "failed to forward hook event to registry");
                         }
                     }
-                    Err(e) => warn!(?e, line = %trimmed, "invalid hook json"),
+                    None => warn!("hook event missing hook_event_name"),
                 }
             }
             Err(e) => {
-                warn!(?e, "hook connection read failed");
-                return;
+                let preview = String::from_utf8_lossy(&bytes);
+                let truncated = if preview.len() > 200 {
+                    format!("{}…", &preview[..200])
+                } else {
+                    preview.into_owned()
+                };
+                warn!(?e, payload = %truncated, "invalid hook json");
+                break;
             }
         }
     }
