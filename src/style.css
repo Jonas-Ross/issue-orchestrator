@@ -1,0 +1,16 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  background: #0d0d0d;
+}
+
+#terminal {
+  height: 100vh;
+  padding: 8px;
+}

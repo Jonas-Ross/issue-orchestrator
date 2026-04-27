@@ -1,0 +1,12 @@
+[package]
+name = "issue-orchestrator"
+version = "0.1.0"
+edition = "2021"
+description = "Embedded terminal app for managing Claude Code issue-team sessions"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+portable-pty = "0.8"
