@@ -10,7 +10,7 @@ use tracing::warn;
 
 use crate::config::{Config, RepoEntry};
 use crate::registry::{RegistryCmd, RegistryEvent, SessionId, SessionSummary, SpawnSpec};
-use crate::spawn::{self, GitRunner, Issue, IssueClient};
+use crate::spawn::{self, Decision, GitRunner, Issue, IssueClient};
 
 /// Tauri-managed state — actor mailbox plus paths/config and the
 /// boundary handles (gh, git) the IPC layer needs.
@@ -200,6 +200,50 @@ pub async fn list_issues(
     let path = PathBuf::from(&repo.path);
     issue_client
         .list(&path)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_issue_body(
+    state: State<'_, AppState>,
+    repo_name: String,
+    issue_number: u64,
+) -> Result<String, String> {
+    let repo = {
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        config
+            .repos
+            .iter()
+            .find(|r| r.name == repo_name)
+            .cloned()
+            .ok_or_else(|| format!("unknown repo: {repo_name}"))?
+    };
+    let issue_client = state.issue_client.clone();
+    let path = PathBuf::from(&repo.path);
+    issue_client
+        .body(&path, issue_number)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn decide_next_issue(
+    state: State<'_, AppState>,
+    repo_name: String,
+) -> Result<Decision, String> {
+    let repo = {
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        config
+            .repos
+            .iter()
+            .find(|r| r.name == repo_name)
+            .cloned()
+            .ok_or_else(|| format!("unknown repo: {repo_name}"))?
+    };
+    spawn::decide_next_issue(&repo, state.issue_client.clone())
         .await
         .map_err(Into::into)
 }

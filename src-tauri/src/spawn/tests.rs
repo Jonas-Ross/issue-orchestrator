@@ -22,6 +22,9 @@ impl IssueClient for StubIssueClient {
     async fn view(&self, _: &Path, _number: u64) -> Result<Issue> {
         Ok(self.issue.clone())
     }
+    async fn body(&self, _: &Path, _number: u64) -> Result<String> {
+        Ok(format!("body for #{}", self.issue.number))
+    }
 }
 
 #[derive(Default)]
@@ -86,6 +89,14 @@ fn fake_registry(
                         }
                         SpawnSpec::Bash => None,
                     },
+                    issue_url: match &spec {
+                        SpawnSpec::Claude { issue_url, .. } => issue_url.clone(),
+                        SpawnSpec::Bash => None,
+                    },
+                    branch: match &spec {
+                        SpawnSpec::Claude { branch, .. } => branch.clone(),
+                        SpawnSpec::Bash => None,
+                    },
                 };
                 *captured.lock().unwrap() = Some(spec);
                 let _ = reply.send(Ok(summary));
@@ -117,6 +128,7 @@ async fn new_branch_path_uses_add_new() {
             number: 7,
             title: "Add tab strip".into(),
             labels: vec!["feat".into()],
+            url: "https://github.com/demo/demo/issues/7".into(),
         },
     });
     let git = Arc::new(RecordingGit::default());
@@ -148,10 +160,15 @@ async fn new_branch_path_uses_add_new() {
 
     let spec = captured.lock().unwrap().take().expect("Spawn captured");
     match spec {
-        SpawnSpec::Claude { cwd, prompt, .. } => {
+        SpawnSpec::Claude { cwd, prompt, issue_url, branch, .. } => {
             assert!(cwd.ends_with("demo-issue-7"));
             assert!(prompt.contains("issue-team"));
             assert!(prompt.contains("#7"));
+            assert_eq!(branch.as_deref(), Some("issue-7"));
+            assert_eq!(
+                issue_url.as_deref(),
+                Some("https://github.com/demo/demo/issues/7")
+            );
         }
         _ => panic!("expected Claude spec"),
     }
@@ -165,6 +182,7 @@ async fn existing_branch_path_uses_add_existing() {
             number: 12,
             title: "Refactor registry".into(),
             labels: vec![],
+            url: "https://github.com/demo/demo/issues/12".into(),
         },
     });
     let git = Arc::new(RecordingGit {
@@ -209,6 +227,7 @@ async fn existing_worktree_skips_git_add() {
             number: 99,
             title: "Reusable".into(),
             labels: vec![],
+            url: "https://github.com/demo/demo/issues/99".into(),
         },
     });
     let git = Arc::new(RecordingGit {

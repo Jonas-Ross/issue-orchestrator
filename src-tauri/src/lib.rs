@@ -33,6 +33,8 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::get_config,
             ipc::list_repos,
             ipc::list_issues,
+            ipc::get_issue_body,
+            ipc::decide_next_issue,
             ipc::spawn_issue_session,
         ])
         .events(collect_events![
@@ -66,6 +68,8 @@ pub fn run() {
     let builder = make_specta_builder();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
