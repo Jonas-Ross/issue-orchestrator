@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
+import preact from "@preact/preset-vite";
 
-// Vite serves the frontend; Tauri starts its own webview pointing at devUrl.
-// The strict port + envPrefix bits are Tauri's recommended defaults.
 export default defineConfig({
+  plugins: [preact()],
   clearScreen: false,
   server: {
     port: 1420,

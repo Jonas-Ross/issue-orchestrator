@@ -6,5 +6,8 @@ src-tauri/gen/
 node_modules/
 dist/
 
+# Generated bindings
+src/lib/bindings.ts
+
 # OS
 .DS_Store
