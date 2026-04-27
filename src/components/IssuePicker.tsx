@@ -193,7 +193,7 @@ export function IssuePicker() {
               title="Ask Claude to recommend the best next issue"
               onClick={() => void onDecide()}
             >
-              {recommending ? "Thinking…" : "✨ Suggest a task"}
+              {recommending ? "Thinking…" : "Suggest a task"}
             </button>
             <button type="button" class="close" onClick={() => closePicker()}>
               ×
