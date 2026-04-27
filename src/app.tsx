@@ -2,8 +2,10 @@ import { useEffect } from "preact/hooks";
 import { commands, events } from "./lib/bindings";
 import { addSession, removeSession, setStatus } from "./state/sessions";
 import { startPtyStream } from "./state/pty-stream";
+import { setupState } from "./state/setup";
 import { TabStrip } from "./components/TabStrip";
 import { TerminalArea } from "./components/TerminalArea";
+import { SetupPanel } from "./components/SetupPanel";
 
 export function App() {
   useEffect(() => {
@@ -26,9 +28,14 @@ export function App() {
         ),
       );
 
-      const result = await commands.listSessions();
-      if (result.status === "ok") {
-        for (const s of result.data) addSession(s);
+      const sessionList = await commands.listSessions();
+      if (sessionList.status === "ok") {
+        for (const s of sessionList.data) addSession(s);
+      }
+
+      const setup = await commands.getSetupState();
+      if (setup.status === "ok") {
+        setupState.value = setup.data;
       }
     })();
 
@@ -38,9 +45,10 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div class="app">
       <TabStrip />
       <TerminalArea />
+      <SetupPanel />
     </div>
   );
 }
