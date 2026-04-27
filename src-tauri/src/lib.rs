@@ -41,7 +41,10 @@ pub fn run() {
         .setup(move |app| {
             builder.mount_events(app);
 
-            let registry_tx = registry::SessionRegistryActor::spawn(app.handle().clone());
+            let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+            let registry_tx = registry::SessionRegistryActor::spawn(event_tx);
+            ipc::spawn_event_bridge(app.handle().clone(), event_rx);
+
             app.manage(ipc::AppState {
                 registry: registry_tx,
             });

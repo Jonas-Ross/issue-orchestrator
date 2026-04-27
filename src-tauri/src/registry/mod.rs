@@ -1,20 +1,20 @@
 pub mod session;
 pub mod status;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use portable_pty::CommandBuilder;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::AppHandle;
-use tauri_specta::Event;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::ipc::events::{PtyData, SessionAdded, SessionRemoved};
 use crate::pty::{self, PtyEvent};
 
 use self::session::Session;
@@ -34,7 +34,7 @@ pub struct SessionSummary {
 }
 
 /// What kind of process to launch. Phase 1 only spawns bash; Phase 3 (M4)
-/// will add the `Claude` variant for issue-team sessions.
+/// will use the `Claude` variant for issue-team sessions.
 #[derive(Debug)]
 pub enum SpawnSpec {
     Bash,
@@ -76,23 +76,43 @@ pub enum RegistryCmd {
     },
 }
 
+/// Domain events the actor publishes. A Tauri-aware bridge subscribes to
+/// these and turns them into typed Tauri events for the frontend; tests
+/// subscribe directly and assert against them. Keeping the actor free of
+/// `AppHandle` is what makes it testable without a Tauri runtime.
+#[derive(Clone, Debug)]
+pub enum RegistryEvent {
+    PtyData {
+        session_id: SessionId,
+        chunk: String,
+    },
+    SessionAdded(SessionSummary),
+    SessionRemoved {
+        session_id: SessionId,
+    },
+    StatusChange {
+        session_id: SessionId,
+        status: Status,
+    },
+}
+
 pub struct SessionRegistryActor {
     sessions: HashMap<SessionId, Session>,
     rx: mpsc::Receiver<RegistryCmd>,
-    app: AppHandle,
+    events: mpsc::UnboundedSender<RegistryEvent>,
 }
 
 impl SessionRegistryActor {
-    /// Boot the actor on the Tauri tokio runtime and return the sender
-    /// used by IPC commands and the M3 hook listener to drive it.
-    pub fn spawn(app: AppHandle) -> mpsc::Sender<RegistryCmd> {
+    /// Boot the actor on the current tokio runtime and return its mailbox.
+    /// `events` is the channel where domain events are published.
+    pub fn spawn(events: mpsc::UnboundedSender<RegistryEvent>) -> mpsc::Sender<RegistryCmd> {
         let (tx, rx) = mpsc::channel(64);
         let actor = Self {
             sessions: HashMap::new(),
             rx,
-            app,
+            events,
         };
-        tauri::async_runtime::spawn(actor.run());
+        tokio::spawn(actor.run());
         tx
     }
 
@@ -161,11 +181,8 @@ impl SessionRegistryActor {
             },
         );
 
-        spawn_pty_forwarder(self.app.clone(), id.clone(), rx_evt);
-
-        if let Err(e) = SessionAdded(summary.clone()).emit(&self.app) {
-            warn!(?e, "failed to emit SessionAdded");
-        }
+        spawn_pty_forwarder(self.events.clone(), id.clone(), rx_evt);
+        emit(&self.events, RegistryEvent::SessionAdded(summary.clone()));
         info!(session_id = %id, "session spawned");
         Ok(summary)
     }
@@ -189,13 +206,12 @@ impl SessionRegistryActor {
     fn handle_kill(&mut self, id: &str) -> Result<()> {
         match self.sessions.remove(id) {
             Some(_) => {
-                if let Err(e) = (SessionRemoved {
-                    session_id: id.to_owned(),
-                })
-                .emit(&self.app)
-                {
-                    warn!(?e, "failed to emit SessionRemoved");
-                }
+                emit(
+                    &self.events,
+                    RegistryEvent::SessionRemoved {
+                        session_id: id.to_owned(),
+                    },
+                );
                 info!(session_id = %id, "session killed");
                 Ok(())
             }
@@ -216,18 +232,26 @@ impl SessionRegistryActor {
     }
 }
 
-/// Drain `PtyEvent`s from one PTY's reader thread and re-emit them to the
-/// frontend as `pty:data` Tauri events. One forwarder task per session.
-fn spawn_pty_forwarder(app: AppHandle, session_id: SessionId, mut rx: mpsc::Receiver<PtyEvent>) {
-    tauri::async_runtime::spawn(async move {
+/// Drain `PtyEvent`s from one PTY's reader thread and re-publish them as
+/// `RegistryEvent::PtyData`. One forwarder task per session.
+fn spawn_pty_forwarder(
+    events: mpsc::UnboundedSender<RegistryEvent>,
+    session_id: SessionId,
+    mut rx: mpsc::Receiver<PtyEvent>,
+) {
+    tokio::spawn(async move {
         while let Some(evt) = rx.recv().await {
             match evt {
                 PtyEvent::Data(chunk) => {
-                    let _ = (PtyData {
-                        session_id: session_id.clone(),
-                        chunk,
-                    })
-                    .emit(&app);
+                    if events
+                        .send(RegistryEvent::PtyData {
+                            session_id: session_id.clone(),
+                            chunk,
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
                 PtyEvent::Eof => break,
             }
@@ -235,10 +259,16 @@ fn spawn_pty_forwarder(app: AppHandle, session_id: SessionId, mut rx: mpsc::Rece
     });
 }
 
+fn emit(events: &mpsc::UnboundedSender<RegistryEvent>, evt: RegistryEvent) {
+    if let Err(e) = events.send(evt) {
+        warn!(?e, "registry event channel closed");
+    }
+}
+
 /// Translate a `SpawnSpec` into a portable-pty `CommandBuilder` plus
-/// metadata for the registry. Always copies the parent env, sets
-/// `TERM=xterm-256color`, and seeds `ISSUE_ORCH_SESSION_ID` so spawned
-/// processes can be correlated back to a session via M3 hooks.
+/// metadata. Always copies the parent env, sets `TERM=xterm-256color`,
+/// and seeds `ISSUE_ORCH_SESSION_ID` so spawned processes can be
+/// correlated back to a session via M3 hooks.
 fn build_command(
     orch_id: &str,
     spec: SpawnSpec,
