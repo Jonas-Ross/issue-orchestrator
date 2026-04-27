@@ -77,7 +77,7 @@ pub fn run() {
             let registry_for_hooks = registry_tx.clone();
             let sock_for_hooks = sock_path.clone();
             let log_for_hooks = log_path.clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 if let Err(e) =
                     hooks::run_listener(sock_for_hooks, log_for_hooks, registry_for_hooks).await
                 {

@@ -118,7 +118,7 @@ impl SessionRegistryActor {
             rx,
             events,
         };
-        tokio::spawn(actor.run());
+        tauri::async_runtime::spawn(actor.run());
         tx
     }
 
@@ -279,7 +279,7 @@ fn spawn_pty_forwarder(
     session_id: SessionId,
     mut rx: mpsc::Receiver<PtyEvent>,
 ) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         while let Some(evt) = rx.recv().await {
             match evt {
                 PtyEvent::Data(chunk) => {

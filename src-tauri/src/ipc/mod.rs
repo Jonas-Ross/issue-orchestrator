@@ -26,7 +26,7 @@ pub struct AppState {
 /// Bridge: drains domain events from the actor and re-emits them as the
 /// matching typed Tauri events. Spawned once during app setup.
 pub fn spawn_event_bridge(app: AppHandle, mut rx: mpsc::UnboundedReceiver<RegistryEvent>) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         while let Some(evt) = rx.recv().await {
             if let Err(e) = forward(&app, evt) {
                 warn!(?e, "failed to emit Tauri event");
