@@ -14,4 +14,6 @@ pub struct Session {
     pub handles: PtyHandles,
     pub claude_session_id: Option<String>,
     pub worktree_path: Option<PathBuf>,
+    pub issue_url: Option<String>,
+    pub branch: Option<String>,
 }

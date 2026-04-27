@@ -22,6 +22,7 @@ pub struct Issue {
     pub number: u64,
     pub title: String,
     pub labels: Vec<String>,
+    pub url: String,
 }
 
 /// Boundary trait for the GitHub CLI. Stored in `AppState` as
@@ -31,6 +32,7 @@ pub struct Issue {
 pub trait IssueClient: Send + Sync {
     async fn list(&self, repo_path: &Path) -> Result<Vec<Issue>>;
     async fn view(&self, repo_path: &Path, number: u64) -> Result<Issue>;
+    async fn body(&self, repo_path: &Path, number: u64) -> Result<String>;
 }
 
 pub struct GhCli;
@@ -40,6 +42,7 @@ struct GhIssue {
     number: u64,
     title: String,
     labels: Vec<GhLabel>,
+    url: String,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +56,7 @@ impl From<GhIssue> for Issue {
             number: i.number,
             title: i.title,
             labels: i.labels.into_iter().map(|l| l.name).collect(),
+            url: i.url,
         }
     }
 }
@@ -69,7 +73,7 @@ impl IssueClient for GhCli {
                 "--limit",
                 "50",
                 "--json",
-                "number,title,labels",
+                "number,title,labels,url",
             ])
             .current_dir(repo_path)
             .output()
@@ -89,7 +93,7 @@ impl IssueClient for GhCli {
     async fn view(&self, repo_path: &Path, number: u64) -> Result<Issue> {
         let output = Command::new("gh")
             .args(["issue", "view", &number.to_string()])
-            .args(["--json", "number,title,labels"])
+            .args(["--json", "number,title,labels,url"])
             .current_dir(repo_path)
             .output()
             .await
@@ -103,6 +107,24 @@ impl IssueClient for GhCli {
         let parsed: GhIssue = serde_json::from_slice(&output.stdout)
             .map_err(|e| Error::Spawn(format!("gh json: {e}")))?;
         Ok(parsed.into())
+    }
+
+    async fn body(&self, repo_path: &Path, number: u64) -> Result<String> {
+        let output = Command::new("gh")
+            .args(["issue", "view", &number.to_string()])
+            .args(["--json", "body", "--jq", ".body"])
+            .current_dir(repo_path)
+            .output()
+            .await
+            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
+        if !output.status.success() {
+            return Err(Error::Spawn(format!(
+                "gh issue view failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+        let body = String::from_utf8_lossy(&output.stdout).trim_end().to_owned();
+        Ok(body)
     }
 }
 
@@ -230,6 +252,8 @@ pub async fn spawn_issue_session(
                 prompt,
                 worktree_path,
                 title,
+                issue_url: Some(issue.url.clone()),
+                branch: Some(branch.clone()),
             },
             cols,
             rows,
@@ -251,4 +275,151 @@ fn truncate(s: &str, max_len: usize) -> String {
     let mut out: String = s.chars().take(max_len.saturating_sub(1)).collect();
     out.push('…');
     out
+}
+
+/// Output of the headless "Decide next task" agent. Returned to the
+/// frontend so the picker can highlight the recommendation and surface
+/// the model's one-line reasoning.
+#[derive(Clone, Debug, Type, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Decision {
+    pub number: u64,
+    pub reasoning: String,
+}
+
+/// Run a one-shot `claude -p` over the open issues and ask the model to
+/// pick the best one to tackle next. The prompt instructs the model to
+/// respond with a single JSON object so we can parse it deterministically.
+pub async fn decide_next_issue(
+    repo: &RepoEntry,
+    issue_client: Arc<dyn IssueClient>,
+) -> Result<Decision> {
+    let repo_path = PathBuf::from(&repo.path);
+    let issues = issue_client.list(&repo_path).await?;
+    if issues.is_empty() {
+        return Err(Error::Spawn("no open issues to choose from".into()));
+    }
+
+    let prompt = build_decide_prompt(&issues);
+
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("claude")
+            .arg("-p")
+            .arg(&prompt)
+            .current_dir(&repo_path)
+            .output(),
+    )
+    .await
+    .map_err(|_| Error::Spawn("claude -p timed out after 60s".into()))?
+    .map_err(|e| Error::Spawn(format!("claude: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Spawn(format!(
+            "claude -p failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let decision = parse_decision(&stdout)?;
+
+    if !issues.iter().any(|i| i.number == decision.number) {
+        return Err(Error::Spawn(format!(
+            "model picked #{} but it is not in the open issue list",
+            decision.number
+        )));
+    }
+    Ok(decision)
+}
+
+fn build_decide_prompt(issues: &[Issue]) -> String {
+    let mut lines = String::new();
+    for i in issues {
+        let labels = if i.labels.is_empty() {
+            String::new()
+        } else {
+            format!(" (labels: {})", i.labels.join(", "))
+        };
+        lines.push_str(&format!("- #{} — {}{}\n", i.number, i.title, labels));
+    }
+    format!(
+        "You are picking the best GitHub issue to work on next from the list below.\n\
+         Output ONLY a single JSON object — no preamble, no fenced code block, no commentary.\n\
+         Schema: {{\"number\": <issue number>, \"reasoning\": \"<one short sentence>\"}}\n\n\
+         Issues:\n{lines}"
+    )
+}
+
+/// Tolerantly extract a `Decision` from `claude -p` stdout. The model is
+/// asked to emit raw JSON, but we strip ``` fences and locate the first
+/// `{...}` block defensively in case it adds chatter.
+pub fn parse_decision(raw: &str) -> Result<Decision> {
+    let trimmed = raw.trim();
+    let cleaned = strip_fence(trimmed);
+    let json_str = extract_first_object(cleaned)
+        .ok_or_else(|| Error::Spawn(format!("no JSON object in claude output: {raw}")))?;
+    serde_json::from_str::<Decision>(json_str)
+        .map_err(|e| Error::Spawn(format!("parse decision json: {e} (input: {json_str})")))
+}
+
+fn strip_fence(s: &str) -> &str {
+    let s = s.trim();
+    if let Some(rest) = s.strip_prefix("```json") {
+        return rest.trim_start_matches('\n').trim_end_matches("```").trim();
+    }
+    if let Some(rest) = s.strip_prefix("```") {
+        return rest.trim_start_matches('\n').trim_end_matches("```").trim();
+    }
+    s
+}
+
+fn extract_first_object(s: &str) -> Option<&str> {
+    let start = s.find('{')?;
+    let mut depth = 0i32;
+    for (i, c) in s[start..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let end = start + i + c.len_utf8();
+                    return Some(&s[start..end]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod decide_tests {
+    use super::*;
+
+    #[test]
+    fn parses_raw_json() {
+        let d = parse_decision(r#"{"number": 12, "reasoning": "small + isolated"}"#).unwrap();
+        assert_eq!(d.number, 12);
+        assert_eq!(d.reasoning, "small + isolated");
+    }
+
+    #[test]
+    fn parses_json_inside_code_fence() {
+        let raw = "```json\n{\"number\": 5, \"reasoning\": \"oldest open\"}\n```";
+        let d = parse_decision(raw).unwrap();
+        assert_eq!(d.number, 5);
+    }
+
+    #[test]
+    fn parses_json_with_chatter() {
+        let raw = "Sure! Here's my pick:\n{\"number\": 42, \"reasoning\": \"unblocks others\"}\nLet me know.";
+        let d = parse_decision(raw).unwrap();
+        assert_eq!(d.number, 42);
+    }
+
+    #[test]
+    fn errors_with_no_object() {
+        assert!(parse_decision("nothing here").is_err());
+    }
 }

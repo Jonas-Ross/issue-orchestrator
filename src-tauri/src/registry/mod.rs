@@ -32,6 +32,8 @@ pub struct SessionSummary {
     pub title: String,
     pub status: Status,
     pub worktree_path: Option<String>,
+    pub issue_url: Option<String>,
+    pub branch: Option<String>,
 }
 
 /// What kind of process to launch. Phase 1 only spawns bash; Phase 3 (M4)
@@ -44,6 +46,8 @@ pub enum SpawnSpec {
         prompt: String,
         worktree_path: PathBuf,
         title: String,
+        issue_url: Option<String>,
+        branch: Option<String>,
     },
 }
 
@@ -197,27 +201,31 @@ impl SessionRegistryActor {
         rows: u16,
     ) -> Result<SessionSummary> {
         let id: SessionId = Uuid::new_v4().to_string();
-        let (cmd, title, worktree_path) = build_command(&id, spec)?;
+        let built = build_command(&id, spec)?;
 
         let (tx_evt, rx_evt) = mpsc::channel::<PtyEvent>(256);
-        let handles = pty::spawn_pty(cmd, cols, rows, tx_evt)?;
+        let handles = pty::spawn_pty(built.cmd, cols, rows, tx_evt)?;
 
         let summary = SessionSummary {
             id: id.clone(),
-            title: title.clone(),
+            title: built.title.clone(),
             status: Status::Running,
-            worktree_path: worktree_path.as_ref().map(|p| p.display().to_string()),
+            worktree_path: built.worktree_path.as_ref().map(|p| p.display().to_string()),
+            issue_url: built.issue_url.clone(),
+            branch: built.branch.clone(),
         };
 
         self.sessions.insert(
             id.clone(),
             Session {
                 id: id.clone(),
-                title,
+                title: built.title,
                 status: Status::Running,
                 handles,
                 claude_session_id: None,
-                worktree_path,
+                worktree_path: built.worktree_path,
+                issue_url: built.issue_url,
+                branch: built.branch,
             },
         );
 
@@ -267,6 +275,8 @@ impl SessionRegistryActor {
                 title: s.title.clone(),
                 status: s.status,
                 worktree_path: s.worktree_path.as_ref().map(|p| p.display().to_string()),
+                issue_url: s.issue_url.clone(),
+                branch: s.branch.clone(),
             })
             .collect()
     }
@@ -305,14 +315,19 @@ fn emit(events: &mpsc::UnboundedSender<RegistryEvent>, evt: RegistryEvent) {
     }
 }
 
+struct BuiltCommand {
+    cmd: CommandBuilder,
+    title: String,
+    worktree_path: Option<PathBuf>,
+    issue_url: Option<String>,
+    branch: Option<String>,
+}
+
 /// Translate a `SpawnSpec` into a portable-pty `CommandBuilder` plus
 /// metadata. Always copies the parent env, sets `TERM=xterm-256color`,
 /// and seeds `ISSUE_ORCH_SESSION_ID` so spawned processes can be
 /// correlated back to a session via M3 hooks.
-fn build_command(
-    orch_id: &str,
-    spec: SpawnSpec,
-) -> Result<(CommandBuilder, String, Option<PathBuf>)> {
+fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltCommand> {
     match spec {
         SpawnSpec::Bash => {
             let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
@@ -321,19 +336,33 @@ fn build_command(
             if let Ok(home) = std::env::var("HOME") {
                 cmd.cwd(home);
             }
-            Ok((cmd, "bash".to_owned(), None))
+            Ok(BuiltCommand {
+                cmd,
+                title: "bash".to_owned(),
+                worktree_path: None,
+                issue_url: None,
+                branch: None,
+            })
         }
         SpawnSpec::Claude {
             cwd,
             prompt,
             worktree_path,
             title,
+            issue_url,
+            branch,
         } => {
             let mut cmd = CommandBuilder::new("claude");
             apply_common_env(&mut cmd, orch_id);
             cmd.cwd(&cwd);
             cmd.arg(prompt);
-            Ok((cmd, title, Some(worktree_path)))
+            Ok(BuiltCommand {
+                cmd,
+                title,
+                worktree_path: Some(worktree_path),
+                issue_url,
+                branch,
+            })
         }
     }
 }

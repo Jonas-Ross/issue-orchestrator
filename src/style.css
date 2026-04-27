@@ -12,6 +12,33 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+a {
+  color: #93c5fd;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 80ms ease, border-color 80ms ease;
+  cursor: pointer;
+}
+a:hover {
+  color: #bfdbfe;
+  border-bottom-color: #93c5fd;
+}
+a:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.modal select {
+  cursor: pointer;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -327,6 +354,15 @@ body {
   font-size: 12px;
 }
 
+a.issue-number {
+  color: #93c5fd;
+  border-bottom-color: transparent;
+}
+a.issue-number:hover {
+  color: #bfdbfe;
+  border-bottom-color: #93c5fd;
+}
+
 .issue-title {
   color: #e6e6e6;
 }
@@ -344,7 +380,195 @@ body {
   font-size: 11px;
 }
 
+.label.ai-pick {
+  background: #2563eb;
+  color: #fff;
+}
+
 .spinner {
   color: #888;
   font-size: 12px;
+}
+
+.issue.ai-pick {
+  border-left: 3px solid #2563eb;
+  padding-left: 13px;
+}
+
+.issue-reasoning {
+  grid-column: 2 / -1;
+  margin-top: 4px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.issue-caret {
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  width: 18px;
+  padding: 0;
+  line-height: 1;
+}
+.issue-caret:hover {
+  color: #ccc;
+}
+
+.issue-body {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  background: #0d0d0d;
+  border: 1px solid #1f1f1f;
+  border-radius: 4px;
+  color: #c8c8c8;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.picker-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.picker-toolbar input.issue-search {
+  width: 100%;
+  background: #0d0d0d;
+  color: #e6e6e6;
+  border: 1px solid #2a2a2a;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  background: #2a2a2a;
+  color: #aaa;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  user-select: none;
+}
+.chip:hover { color: #ccc; }
+.chip.active {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.decide-btn {
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #e6e6e6;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.decide-btn:hover:not(:disabled) {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+.decide-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tab-link {
+  color: #93c5fd;
+  font-size: 11px;
+  padding: 0 4px;
+  border-bottom: none;
+}
+.tab-link:hover { color: #bfdbfe; }
+
+.context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 180px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color: #d6d6d6;
+  list-style: none;
+  margin: 0;
+}
+.context-menu li {
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.context-menu li:hover {
+  background: #2563eb;
+  color: #fff;
+}
+.context-menu li.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.context-menu li.disabled:hover {
+  background: transparent;
+  color: #d6d6d6;
+}
+.context-menu li.separator {
+  height: 1px;
+  background: #2a2a2a;
+  margin: 4px 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+.palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.palette-list li {
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #1f1f1f;
+}
+.palette-list li.active,
+.palette-list li:hover {
+  background: #1d4ed8;
+  color: #fff;
+}
+.palette-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #2a2a2a;
+  color: #e6e6e6;
+  font-size: 14px;
+  outline: none;
 }
