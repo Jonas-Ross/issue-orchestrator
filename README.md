@@ -77,6 +77,11 @@ SessionStart/Notification/Stop/SessionEnd events to the app's UDS. Without
 that wiring the per-tab status pill stays gray; with it the pill flips
 green/amber/blue as Claude works.
 
+The snippet single-quotes the script path because macOS's
+`~/Library/Application Support/` contains a space and Claude Code pipes
+the command through `/bin/sh -c`. If you hand-edit the entry, keep the
+quotes.
+
 ## What lives where
 
 | Path | Role |

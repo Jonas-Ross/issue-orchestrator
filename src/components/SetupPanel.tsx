@@ -56,7 +56,10 @@ export function SetupPanel() {
 }
 
 function buildSnippet(hookScriptPath: string): string {
-  const cmd = { type: "command", command: hookScriptPath };
+  // Claude Code pipes `command` through /bin/sh -c, so paths with spaces
+  // (notably macOS's "~/Library/Application Support/…") need shell-level
+  // quoting or sh splits on the first space and fails to find the bin.
+  const cmd = { type: "command", command: shellQuote(hookScriptPath) };
   const entry = [{ hooks: [cmd] }];
   const hooks = {
     SessionStart: entry,
@@ -65,4 +68,8 @@ function buildSnippet(hookScriptPath: string): string {
     SessionEnd: entry,
   };
   return JSON.stringify({ hooks }, null, 2);
+}
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }
