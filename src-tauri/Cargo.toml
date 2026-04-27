@@ -3,6 +3,7 @@ name = "issue-orchestrator"
 version = "0.1.0"
 edition = "2021"
 description = "Embedded terminal app for managing Claude Code issue-team sessions"
+default-run = "issue-orchestrator"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -10,3 +11,19 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 portable-pty = "0.8"
+uuid = { version = "1.23.1", features = ["v4", "serde"] }
+tokio = { version = "1.52.1", features = ["rt-multi-thread", "net", "io-util", "macros", "sync", "time", "process"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+specta = { version = "2.0.0-rc.24", features = ["derive"] }
+specta-typescript = "0.0.11"
+tauri-specta = { version = "2.0.0-rc.24", features = ["derive", "typescript"] }
+thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+dirs = "6.0.0"
+shellexpand = "3.1.2"
+async-trait = "0.1.89"
+
+[dev-dependencies]
+tempfile = "3.27.0"

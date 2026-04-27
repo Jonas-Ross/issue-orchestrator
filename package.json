@@ -4,18 +4,24 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run bindings",
     "dev": "vite",
+    "prebuild": "npm run bindings",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "bindings": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-bindings --quiet",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@preact/signals": "^2.9.0",
     "@tauri-apps/api": "^2",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-webgl": "^0.18.0",
-    "@xterm/xterm": "^5.5.0"
+    "@xterm/xterm": "^5.5.0",
+    "preact": "^10.29.1"
   },
   "devDependencies": {
+    "@preact/preset-vite": "^2.10.5",
     "@tauri-apps/cli": "^2",
     "typescript": "~5.6",
     "vite": "^5.4"
