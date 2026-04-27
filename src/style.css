@@ -8,9 +8,128 @@ body {
   padding: 0;
   height: 100vh;
   background: #0d0d0d;
+  color: #e6e6e6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-#terminal {
+.app {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+}
+
+.tab-strip {
+  display: flex;
+  align-items: center;
+  background: #1a1a1a;
+  border-bottom: 1px solid #2a2a2a;
+  padding: 0 4px;
+  height: 36px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  margin: 4px 2px 0 2px;
+  height: 28px;
+  color: #888;
+  user-select: none;
+}
+.tab:hover {
+  background: #252525;
+  color: #ccc;
+}
+.tab.active {
+  background: #0d0d0d;
+  color: #e6e6e6;
+}
+
+.status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+  flex-shrink: 0;
+}
+.status-spawning {
+  background: #888;
+}
+.status-running {
+  background: #4ade80;
+}
+.status-needs_input {
+  background: #fbbf24;
+}
+.status-idle {
+  background: #60a5fa;
+}
+.status-exited {
+  background: #ef4444;
+}
+
+.title {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.close:hover {
+  background: #444;
+  color: #fff;
+}
+
+.add-tab {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: 4px;
+  line-height: 1;
+}
+.add-tab:hover {
+  background: #252525;
+  color: #ccc;
+}
+
+.terminal-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-host {
+  position: absolute;
+  inset: 0;
   padding: 8px;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  font-size: 13px;
 }

@@ -1,15 +1,19 @@
 import { useEffect, useRef } from "preact/hooks";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { commands } from "../lib/bindings";
+import { attachTerminal, detachTerminal } from "../state/pty-stream";
 
-/// Phase 0: single-session port of the original src/main.ts. Subscribes
-/// to pty:data, forwards keystrokes via pty_write, resizes on window
-/// resize, and spawns one PTY on mount. Phase 1 (M2) replaces this with
-/// per-session terminals driven by the registry actor.
-export function TerminalView() {
+interface Props {
+  sessionId: string;
+  active: boolean;
+}
+
+/// One xterm instance per session, mounted once and kept alive (hidden
+/// via display:none when inactive) so scrollback survives tab switches.
+export function TerminalView({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const refs = useRef<{ term: Terminal; fit: FitAddon } | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -27,42 +31,45 @@ export function TerminalView() {
     fit.fit();
 
     term.onData((data) => {
-      void invoke("pty_write", { data });
+      void commands.ptyWrite(sessionId, data);
     });
 
-    const sendResize = () => {
-      fit.fit();
-      void invoke("pty_resize", { cols: term.cols, rows: term.rows });
-    };
-    window.addEventListener("resize", sendResize);
+    attachTerminal(sessionId, term);
+    refs.current = { term, fit };
 
-    let cancelled = false;
-    const cleanups: Array<() => void> = [
-      () => window.removeEventListener("resize", sendResize),
-      () => term.dispose(),
-    ];
-
-    // Subscribe BEFORE spawning so bash's initial prompt isn't lost.
-    void (async () => {
-      const unlisten = await listen<string>("pty:data", (e) => {
-        term.write(e.payload);
-      });
-      if (cancelled) {
-        unlisten();
-        return;
-      }
-      cleanups.push(unlisten);
-
-      await invoke("pty_spawn", { cols: term.cols, rows: term.rows });
-      if (cancelled) return;
-      term.focus();
-    })();
+    // Initial size sync to backend.
+    void commands.ptyResize(sessionId, term.cols, term.rows);
 
     return () => {
-      cancelled = true;
-      while (cleanups.length) cleanups.pop()?.();
+      detachTerminal(sessionId);
+      term.dispose();
+      refs.current = null;
     };
-  }, []);
+  }, [sessionId]);
 
-  return <div id="terminal" ref={hostRef} />;
+  // When this terminal becomes active, refit (the host has been hidden,
+  // so its dimensions may have lagged) and re-sync the backend size.
+  useEffect(() => {
+    if (!active) return;
+    const r = refs.current;
+    if (!r) return;
+    r.fit.fit();
+    void commands.ptyResize(sessionId, r.term.cols, r.term.rows);
+    r.term.focus();
+
+    const onResize = () => {
+      r.fit.fit();
+      void commands.ptyResize(sessionId, r.term.cols, r.term.rows);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [active, sessionId]);
+
+  return (
+    <div
+      ref={hostRef}
+      className="terminal-host"
+      style={{ display: active ? "block" : "none" }}
+    />
+  );
 }
