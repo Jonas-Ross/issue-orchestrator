@@ -1,6 +1,6 @@
 # Milestones
 
-## M1 — PTY round-trip *(this scaffold)*
+## M1 — PTY round-trip *(done)*
 
 **Goal:** `bash` running inside the app window with reflow, ctrl-c, and
 clean exit on quit.
@@ -27,7 +27,7 @@ clean exit on quit.
 
 ---
 
-## M2 — Multi-session registry
+## M2 — Multi-session registry *(done)*
 
 **Goal:** N PTYs running side-by-side, tab strip in the UI, kill flow.
 
@@ -51,7 +51,7 @@ clean exit on quit.
 
 ---
 
-## M3 — Hook receiver
+## M3 — Hook receiver *(done)*
 
 **Goal:** Claude Code sessions report state to the app over a Unix socket.
 Status pill per tab: running / needs-input / idle / pr-open.
@@ -82,7 +82,7 @@ the app is closed get replayed on next startup.
 
 ---
 
-## M4 — Spawn flow
+## M4 — Spawn flow *(done)*
 
 **Goal:** pick an issue from a list, app does worktree creation + claude launch.
 
