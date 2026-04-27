@@ -1,23 +1,26 @@
 pub mod events;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
-use crate::config::Config;
+use crate::config::{Config, RepoEntry};
 use crate::registry::{RegistryCmd, RegistryEvent, SessionId, SessionSummary, SpawnSpec};
+use crate::spawn::{self, GitRunner, Issue, IssueClient};
 
-/// Tauri-managed state — actor mailbox plus paths/config the IPC layer
-/// needs to expose to the frontend.
+/// Tauri-managed state — actor mailbox plus paths/config and the
+/// boundary handles (gh, git) the IPC layer needs.
 pub struct AppState {
     pub registry: mpsc::Sender<RegistryCmd>,
     pub config_path: PathBuf,
     pub hook_script_path: PathBuf,
     pub config: Mutex<Config>,
+    pub issue_client: Arc<dyn IssueClient>,
+    pub git_runner: Arc<dyn GitRunner>,
 }
 
 /// Bridge: drains domain events from the actor and re-emits them as the
@@ -169,4 +172,68 @@ pub fn mark_setup_done(state: State<'_, AppState>) -> Result<(), String> {
 pub fn get_config(state: State<'_, AppState>) -> Result<Config, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?;
     Ok(config.clone())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoEntry>, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    Ok(config.repos.clone())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_issues(
+    state: State<'_, AppState>,
+    repo_name: String,
+) -> Result<Vec<Issue>, String> {
+    let repo = {
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        config
+            .repos
+            .iter()
+            .find(|r| r.name == repo_name)
+            .cloned()
+            .ok_or_else(|| format!("unknown repo: {repo_name}"))?
+    };
+    let issue_client = state.issue_client.clone();
+    let path = PathBuf::from(&repo.path);
+    issue_client
+        .list(&path)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn spawn_issue_session(
+    state: State<'_, AppState>,
+    repo_name: String,
+    issue_number: u64,
+    cols: u16,
+    rows: u16,
+) -> Result<SessionSummary, String> {
+    let (repo, config) = {
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        let repo = config
+            .repos
+            .iter()
+            .find(|r| r.name == repo_name)
+            .cloned()
+            .ok_or_else(|| format!("unknown repo: {repo_name}"))?;
+        (repo, config.clone())
+    };
+
+    spawn::spawn_issue_session(
+        &repo,
+        issue_number,
+        &config,
+        state.issue_client.clone(),
+        state.git_runner.clone(),
+        state.registry.clone(),
+        cols,
+        rows,
+    )
+    .await
+    .map_err(Into::into)
 }

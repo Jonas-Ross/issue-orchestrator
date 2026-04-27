@@ -5,8 +5,9 @@ pub mod ipc;
 pub mod paths;
 pub mod pty;
 pub mod registry;
+pub mod spawn;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events, Builder};
@@ -30,6 +31,9 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::get_setup_state,
             ipc::mark_setup_done,
             ipc::get_config,
+            ipc::list_repos,
+            ipc::list_issues,
+            ipc::spawn_issue_session,
         ])
         .events(collect_events![
             ipc::events::PtyData,
@@ -86,6 +90,8 @@ pub fn run() {
                 config_path: config_path.clone(),
                 hook_script_path: hook_script_path.clone(),
                 config: Mutex::new(config.clone()),
+                issue_client: Arc::new(spawn::GhCli),
+                git_runner: Arc::new(spawn::GitCli),
             });
 
             Ok(())
