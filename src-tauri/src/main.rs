@@ -6,6 +6,8 @@ mod pty;
 
 use std::sync::Mutex;
 
+use tracing_subscriber::EnvFilter;
+
 use crate::pty::PtySession;
 
 /// Tauri-managed shared state. Held in a Mutex because Tauri commands run
@@ -16,6 +18,10 @@ pub struct AppState {
 }
 
 fn main() {
+    init_tracing();
+
+    tracing::info!("starting issue-orchestrator");
+
     tauri::Builder::default()
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
@@ -25,4 +31,10 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn init_tracing() {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("issue_orchestrator=info,warn"));
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 }
