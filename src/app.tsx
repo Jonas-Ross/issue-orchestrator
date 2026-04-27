@@ -6,6 +6,7 @@ import { setupState } from "./state/setup";
 import { TabStrip } from "./components/TabStrip";
 import { TerminalArea } from "./components/TerminalArea";
 import { SetupPanel } from "./components/SetupPanel";
+import { IssuePicker } from "./components/IssuePicker";
 
 export function App() {
   useEffect(() => {
@@ -48,6 +49,7 @@ export function App() {
     <div class="app">
       <TabStrip />
       <TerminalArea />
+      <IssuePicker />
       <SetupPanel />
     </div>
   );
