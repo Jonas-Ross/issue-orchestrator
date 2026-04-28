@@ -16,4 +16,5 @@ pub struct Session {
     pub worktree_path: Option<PathBuf>,
     pub issue_url: Option<String>,
     pub branch: Option<String>,
+    pub repo_name: Option<String>,
 }

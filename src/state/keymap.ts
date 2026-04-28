@@ -5,6 +5,7 @@ import { closePicker, openPicker, pickerOpen } from "./picker";
 import { closePalette, paletteOpen, togglePalette } from "./palette";
 import { closeContextMenu, contextMenu } from "./context-menu";
 import { toggleSidebar } from "./sidebar";
+import { closeSettings, openSettings, settingsPanelOpen } from "./settings";
 
 /// App-wide keyboard shortcuts. Installed once on the window in capture
 /// phase so Cmd-modified events are handled before xterm sees them.
@@ -33,6 +34,12 @@ export function useKeymap() {
           e.stopPropagation();
           return;
         }
+        if (settingsPanelOpen.value) {
+          closeSettings();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         return;
       }
 
@@ -49,6 +56,14 @@ export function useKeymap() {
       if (e.shiftKey && e.key.toLowerCase() === "b") {
         return handle(() => {
           void commands.ptySpawn(80, 24);
+        });
+      }
+
+      // Cmd+, → toggle settings panel (Mac convention)
+      if (e.key === ",") {
+        return handle(() => {
+          if (settingsPanelOpen.value) closeSettings();
+          else openSettings();
         });
       }
 

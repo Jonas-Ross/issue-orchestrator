@@ -34,6 +34,10 @@ pub struct SessionSummary {
     pub worktree_path: Option<String>,
     pub issue_url: Option<String>,
     pub branch: Option<String>,
+    /// Name of the repo this session belongs to. `None` for the Bash debug
+    /// shell, which has no repo affinity. Used by the frontend to bucket
+    /// sessions into per-repo drawers.
+    pub repo_name: Option<String>,
 }
 
 /// What kind of process to launch. Phase 1 only spawns bash; Phase 3 (M4)
@@ -48,6 +52,7 @@ pub enum SpawnSpec {
         title: String,
         issue_url: Option<String>,
         branch: Option<String>,
+        repo_name: String,
     },
 }
 
@@ -218,6 +223,7 @@ impl SessionRegistryActor {
             worktree_path: built.worktree_path.as_ref().map(|p| p.display().to_string()),
             issue_url: built.issue_url.clone(),
             branch: built.branch.clone(),
+            repo_name: built.repo_name.clone(),
         };
 
         self.sessions.insert(
@@ -231,6 +237,7 @@ impl SessionRegistryActor {
                 worktree_path: built.worktree_path,
                 issue_url: built.issue_url,
                 branch: built.branch,
+                repo_name: built.repo_name,
             },
         );
 
@@ -282,6 +289,7 @@ impl SessionRegistryActor {
                 worktree_path: s.worktree_path.as_ref().map(|p| p.display().to_string()),
                 issue_url: s.issue_url.clone(),
                 branch: s.branch.clone(),
+                repo_name: s.repo_name.clone(),
             })
             .collect()
     }
@@ -326,6 +334,7 @@ struct BuiltCommand {
     worktree_path: Option<PathBuf>,
     issue_url: Option<String>,
     branch: Option<String>,
+    repo_name: Option<String>,
 }
 
 /// Translate a `SpawnSpec` into a portable-pty `CommandBuilder` plus
@@ -347,6 +356,7 @@ fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltCommand> {
                 worktree_path: None,
                 issue_url: None,
                 branch: None,
+                repo_name: None,
             })
         }
         SpawnSpec::Claude {
@@ -356,6 +366,7 @@ fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltCommand> {
             title,
             issue_url,
             branch,
+            repo_name,
         } => {
             let mut cmd = CommandBuilder::new("claude");
             apply_common_env(&mut cmd, orch_id);
@@ -367,6 +378,7 @@ fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltCommand> {
                 worktree_path: Some(worktree_path),
                 issue_url,
                 branch,
+                repo_name: Some(repo_name),
             })
         }
     }

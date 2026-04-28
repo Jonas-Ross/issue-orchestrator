@@ -11,6 +11,7 @@
       "identifier": "shell:allow-open",
       "allow": [{ "url": "https://github.com/**" }]
     },
-    "notification:default"
+    "notification:default",
+    "dialog:allow-open"
   ]
 }

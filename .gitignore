@@ -11,3 +11,6 @@ src/lib/bindings.ts
 
 # OS
 .DS_Store
+
+# Claude Code local config (per-user paths, allowlists, etc.)
+.claude/

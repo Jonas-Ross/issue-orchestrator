@@ -97,6 +97,10 @@ fn fake_registry(
                         SpawnSpec::Claude { branch, .. } => branch.clone(),
                         SpawnSpec::Bash => None,
                     },
+                    repo_name: match &spec {
+                        SpawnSpec::Claude { repo_name, .. } => Some(repo_name.clone()),
+                        SpawnSpec::Bash => None,
+                    },
                 };
                 *captured.lock().unwrap() = Some(spec);
                 let _ = reply.send(Ok(summary));
@@ -160,11 +164,12 @@ async fn new_branch_path_uses_add_new() {
 
     let spec = captured.lock().unwrap().take().expect("Spawn captured");
     match spec {
-        SpawnSpec::Claude { cwd, prompt, issue_url, branch, .. } => {
+        SpawnSpec::Claude { cwd, prompt, issue_url, branch, repo_name, .. } => {
             assert!(cwd.ends_with("demo-issue-7"));
             assert!(prompt.contains("issue-team"));
             assert!(prompt.contains("#7"));
             assert_eq!(branch.as_deref(), Some("issue-7"));
+            assert_eq!(repo_name, "demo");
             assert_eq!(
                 issue_url.as_deref(),
                 Some("https://github.com/demo/demo/issues/7")
@@ -172,6 +177,8 @@ async fn new_branch_path_uses_add_new() {
         }
         _ => panic!("expected Claude spec"),
     }
+
+    assert_eq!(summary.repo_name.as_deref(), Some("demo"));
 }
 
 #[tokio::test]

@@ -4,6 +4,7 @@ import { commands, events } from "./lib/bindings";
 import { addSession, removeSession, setStatus } from "./state/sessions";
 import { startPtyStream } from "./state/pty-stream";
 import { setupState } from "./state/setup";
+import { loadRepos } from "./state/repos";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { TerminalArea } from "./components/TerminalArea";
@@ -11,6 +12,7 @@ import { SetupPanel } from "./components/SetupPanel";
 import { IssuePicker } from "./components/IssuePicker";
 import { ContextMenu } from "./components/ContextMenu";
 import { CommandPalette } from "./components/CommandPalette";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { useKeymap } from "./state/keymap";
 import { useNotifications } from "./state/notifications";
 
@@ -47,6 +49,8 @@ export function App() {
       if (setup.status === "ok") {
         setupState.value = setup.data;
       }
+
+      await loadRepos();
     })();
 
     return () => {
@@ -73,6 +77,7 @@ export function App() {
       <StatusBar />
       <IssuePicker />
       <CommandPalette />
+      <SettingsPanel />
       <SetupPanel />
       <ContextMenu />
     </div>

@@ -12,12 +12,20 @@ type IssueState =
   | { tag: "ok"; issues: Issue[] }
   | { tag: "error"; message: string };
 
+/// Thin wrapper that mounts/unmounts the inner picker around the open
+/// signal. Keeping the hook-bearing code in `IssuePickerInner` means
+/// every open is a fresh mount (so `useState(prefilledRepo)` actually
+/// honors the prefill, and effects re-register cleanly).
 export function IssuePicker() {
-  if (!pickerOpen.value) return null;
+  const state = pickerOpen.value;
+  if (!state) return null;
+  return <IssuePickerInner prefilledRepo={state.repoName} />;
+}
 
+function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
   const [repos, setRepos] = useState<RepoEntry[] | null>(null);
   const [reposError, setReposError] = useState<string | null>(null);
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(prefilledRepo);
   const [issues, setIssues] = useState<IssueState>({ tag: "idle" });
   const [spawning, setSpawning] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -29,9 +37,84 @@ export function IssuePicker() {
   const [recommendation, setRecommendation] = useState<Decision | null>(null);
   const [recommending, setRecommending] = useState(false);
   const [recoError, setRecoError] = useState<string | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const focusedOnce = useRef(false);
+
+  // Default focus: whichever priority element mounts first wins. The repo
+  // dropdown renders as soon as listRepos resolves; the search input
+  // appears after listIssues. Without a prefill the dropdown beats the
+  // search; with a prefill (drawer-launched) the search wins by default.
+  const onSelectRefAttach = (el: HTMLSelectElement | null) => {
+    if (el && !focusedOnce.current) {
+      el.focus();
+      focusedOnce.current = true;
+    }
+  };
+  const onSearchRefAttach = (el: HTMLInputElement | null) => {
+    if (el && !focusedOnce.current) {
+      el.focus();
+      focusedOnce.current = true;
+    }
+  };
+
+  // Focus trap + restore. Save whatever was focused before opening the
+  // picker (typically the active terminal) and put focus back when the
+  // modal unmounts. Without this, Tab inside the modal can leak to the
+  // sidebar behind the overlay.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    // Make the modal container itself focusable so we have somewhere to
+    // park focus before the first priority element renders.
+    modalRef.current?.focus();
+    return () => {
+      previous?.focus?.();
+    };
+  }, []);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const root = modalRef.current;
+      if (!root) return;
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), select:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null || el === root);
+      if (focusables.length === 0) {
+        e.preventDefault();
+        root.focus();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const insideModal = active && root.contains(active);
+      if (!insideModal) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+
+  useEffect(() => {
+    if (prefilledRepo) {
+      // Drawer-launched picker: repo is fixed; we don't need to load the
+      // repo list at all (no dropdown is shown).
+      return;
+    }
     let cancelled = false;
     void (async () => {
       const result = await commands.listRepos();
@@ -46,7 +129,7 @@ export function IssuePicker() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [prefilledRepo]);
 
   useEffect(() => {
     if (!selectedRepo) return;
@@ -100,6 +183,31 @@ export function IssuePicker() {
     }
   }, [recommendation, filteredIssues]);
 
+  // Clamp highlight when the filtered set shrinks (search typing) so we
+  // never reference an out-of-range index.
+  useEffect(() => {
+    if (filteredIssues.length === 0) {
+      if (highlightedIndex !== 0) setHighlightedIndex(0);
+      return;
+    }
+    if (highlightedIndex >= filteredIssues.length) {
+      setHighlightedIndex(filteredIssues.length - 1);
+    }
+  }, [filteredIssues, highlightedIndex]);
+
+  // Auto-scroll the highlighted issue into view as the user arrows.
+  useEffect(() => {
+    if (filteredIssues.length === 0 || !listRef.current) return;
+    const target = filteredIssues[highlightedIndex];
+    if (!target) return;
+    const el = listRef.current.querySelector(
+      `[data-issue-number="${target.number}"]`,
+    );
+    if (el && "scrollIntoView" in el) {
+      (el as HTMLElement).scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightedIndex, filteredIssues]);
+
   const onSpawn = async (issue: Issue) => {
     if (!selectedRepo || spawning !== null) return;
     setSpawning(issue.number);
@@ -117,6 +225,44 @@ export function IssuePicker() {
     activeId.value = result.data.id;
     closePicker();
   };
+
+  // Arrow-key nav over filteredIssues + Enter to spawn. Capture phase so
+  // we beat the global keymap. Modifier-key combos pass through so
+  // ⌘N / ⌘W / etc. still work over the picker.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "ArrowDown") {
+        if (filteredIssues.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightedIndex((i) => (i + 1) % filteredIssues.length);
+      } else if (e.key === "ArrowUp") {
+        if (filteredIssues.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightedIndex(
+          (i) => (i - 1 + filteredIssues.length) % filteredIssues.length,
+        );
+      } else if (e.key === "Enter") {
+        // Don't hijack Enter inside the search input — that would feel
+        // broken if the user is mid-type. Only trigger when focus is
+        // outside an input, OR explicitly on the issue list.
+        const tgt = e.target as HTMLElement | null;
+        const inInput = tgt?.tagName === "INPUT" || tgt?.tagName === "TEXTAREA";
+        if (inInput && tgt?.classList.contains("issue-search") === false) {
+          return;
+        }
+        const target = filteredIssues[highlightedIndex];
+        if (!target) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void onSpawn(target);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [filteredIssues, highlightedIndex, selectedRepo, spawning]);
 
   const onDecide = async () => {
     if (!selectedRepo || recommending) return;
@@ -182,7 +328,12 @@ export function IssuePicker() {
 
   return (
     <div class="modal-overlay" onClick={() => closePicker()}>
-      <div class="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        class="modal"
+        ref={modalRef}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div class="modal-header">
           <h2>Pick an issue</h2>
           <div class="modal-header-actions">
@@ -201,18 +352,20 @@ export function IssuePicker() {
             </button>
           </div>
         </div>
-        {reposError && <p class="error">Failed to load repos: {reposError}</p>}
-        {!reposError && repos && repos.length === 0 && (
+        {!prefilledRepo && reposError && (
+          <p class="error">Failed to load repos: {reposError}</p>
+        )}
+        {!prefilledRepo && !reposError && repos && repos.length === 0 && (
           <p class="hint">
-            No repos configured. Add a <code>repos</code> entry to your
-            config.json to enable the picker.
+            No repos configured. Use the sidebar's "+ Add repo…" to register one.
           </p>
         )}
-        {repos && repos.length > 1 && (
+        {!prefilledRepo && repos && repos.length > 1 && (
           <div class="row">
             <label>
               Repo:{" "}
               <select
+                ref={onSelectRefAttach}
                 value={selectedRepo ?? ""}
                 onChange={(e) =>
                   setSelectedRepo((e.target as HTMLSelectElement).value)
@@ -233,6 +386,7 @@ export function IssuePicker() {
         {selectedRepo && issues.tag === "ok" && issues.issues.length > 0 && (
           <div class="picker-toolbar">
             <input
+              ref={onSearchRefAttach}
               type="text"
               class="issue-search"
               placeholder="Search by title or #number"
@@ -276,9 +430,10 @@ export function IssuePicker() {
                 No matching issues.
               </li>
             )}
-            {filteredIssues.map((issue) => {
+            {filteredIssues.map((issue, idx) => {
               const isAiPick = recommendation?.number === issue.number;
               const isExpanded = expanded === issue.number;
+              const isHighlighted = idx === highlightedIndex;
               const body = bodies.get(issue.number);
               return (
                 <li
@@ -286,12 +441,14 @@ export function IssuePicker() {
                   class={
                     "issue" +
                     (spawning === issue.number ? " spawning" : "") +
-                    (isAiPick ? " ai-pick" : "")
+                    (isAiPick ? " ai-pick" : "") +
+                    (isHighlighted ? " highlighted" : "")
                   }
                   data-issue-number={issue.number}
                   style={{ gridTemplateColumns: "auto auto 1fr auto auto" }}
                   onClick={() => void onSpawn(issue)}
                   onContextMenu={(e) => onIssueContextMenu(e, issue)}
+                  onMouseEnter={() => setHighlightedIndex(idx)}
                 >
                   <button
                     type="button"
