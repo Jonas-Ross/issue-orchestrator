@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::error::{Error, Result};
 
-const APP_IDENTIFIER: &str = "dev.jonasross.issue-orchestrator";
+const APP_IDENTIFIER: &str = "app.issue-orchestrator.desktop";
 
 /// Compute `~/Library/Application Support/<identifier>` and ensure it
 /// exists. Hardcoded to the macOS layout — Tauri's own path API derives

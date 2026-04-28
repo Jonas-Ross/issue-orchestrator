@@ -98,7 +98,7 @@ session kill — not just on unmount.
 ### App-data layout (macOS hardcoded — `src-tauri/src/paths.rs`)
 
 ```
-~/Library/Application Support/dev.jonasross.issue-orchestrator/
+~/Library/Application Support/app.issue-orchestrator.desktop/
 ├── config.json     # repos[], worktreeRoot, setupDone — atomic save via .tmp + rename
 ├── hook.sh         # generated from hook.sh.template every app start; chmod 0o755
 ├── hooks.sock      # UDS, removed and re-bound on every app start
