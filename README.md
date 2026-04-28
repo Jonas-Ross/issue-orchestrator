@@ -70,7 +70,7 @@ tree); subsequent rebuilds are seconds.
 On first launch the app writes:
 
 ```
-~/Library/Application Support/dev.jonasross.issue-orchestrator/
+~/Library/Application Support/app.issue-orchestrator.desktop/
 ├── config.json     # repos, worktree root, setup flag
 ├── hook.sh         # Generated; do not edit (rewritten on each app start)
 ├── hooks.sock      # UDS, recreated on each app start
@@ -135,7 +135,7 @@ never intercepted.
 
 ## Configuration
 
-`~/Library/Application Support/dev.jonasross.issue-orchestrator/config.json`:
+`~/Library/Application Support/app.issue-orchestrator.desktop/config.json`:
 
 ```jsonc
 {
@@ -229,7 +229,7 @@ After `cargo tauri dev`:
    `claude` session boots in
    `~/dev/worktrees/<repo>-issue-<n>` with the issue-team skill
    prompted. Pill goes green within a few seconds.
-6. `tail -f ~/Library/Application\ Support/dev.jonasross.issue-orchestrator/events.jsonl`
+6. `tail -f ~/Library/Application\ Support/app.issue-orchestrator.desktop/events.jsonl`
    to watch the raw hook stream.
 7. Cmd-Q → all sessions cleaned up.
 
