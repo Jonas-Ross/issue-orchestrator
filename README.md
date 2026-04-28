@@ -6,8 +6,6 @@ each with a live status pill driven by Claude's hook system.
 
 Stop juggling tmux panes and Terminal.app windows.
 
-![Main window](docs/screenshots/main-window.png)
-
 > **Status:** working day-to-day. Tauri 2 + Rust + Preact + xterm.js,
 > macOS only. The registry, hook receiver, and spawn flow are all
 > unit-tested.
@@ -34,17 +32,6 @@ Stop juggling tmux panes and Terminal.app windows.
   root, re-open the setup snippet.
 - **Clean shutdown.** Cmd-Q kills every PTY; no orphaned `claude` or
   `bash` left behind.
-
----
-
-## Screenshots
-
-| | |
-|---|---|
-| ![Issue picker](docs/screenshots/issue-picker.png) | ![Command palette](docs/screenshots/command-palette.png) |
-| Issue picker (⌘N) — open issues across all configured repos. | Command palette (⌘K) — fuzzy-switch sessions, kill, spawn. |
-| ![Settings](docs/screenshots/settings-panel.png) | ![Setup](docs/screenshots/setup-panel.png) |
-| Settings (⌘,) — manage repos and worktree root. | First-run setup — copy the hook snippet, paste once, done. |
 
 ---
 
