@@ -7,6 +7,13 @@ pub mod pty;
 pub mod registry;
 pub mod spawn;
 
+// Force Cargo to track the icon file so generate_context!() re-bakes the
+// dock icon on swap. Tauri's codegen reads the .icns at macro expansion
+// time but never emits rerun-if-changed for it, so without this swapping
+// the icon required `cargo clean -p issue-orchestrator`.
+#[allow(dead_code)]
+const _ICON_TRACKER: &[u8] = include_bytes!("../icons/icon.icns");
+
 use std::sync::{Arc, Mutex};
 
 use tauri::Manager;

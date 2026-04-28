@@ -193,6 +193,7 @@ export function IssuePicker() {
               title="Ask Claude to recommend the best next issue"
               onClick={() => void onDecide()}
             >
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>✦</span>
               {recommending ? "Thinking…" : "Suggest a task"}
             </button>
             <button type="button" class="close" onClick={() => closePicker()}>

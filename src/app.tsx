@@ -1,9 +1,11 @@
 import { useEffect } from "preact/hooks";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { commands, events } from "./lib/bindings";
 import { addSession, removeSession, setStatus } from "./state/sessions";
 import { startPtyStream } from "./state/pty-stream";
 import { setupState } from "./state/setup";
-import { TabStrip } from "./components/TabStrip";
+import { Sidebar } from "./components/Sidebar";
+import { StatusBar } from "./components/StatusBar";
 import { TerminalArea } from "./components/TerminalArea";
 import { SetupPanel } from "./components/SetupPanel";
 import { IssuePicker } from "./components/IssuePicker";
@@ -52,10 +54,23 @@ export function App() {
     };
   }, []);
 
+  // startDragging() requires core:window:allow-start-dragging in
+  // capabilities/default.json — easy to break in another file.
+  const onTitlebarMouseDown = (e: MouseEvent) => {
+    if (e.buttons !== 1) return;
+    const win = getCurrentWindow();
+    const op = e.detail === 2 ? win.toggleMaximize() : win.startDragging();
+    op.catch((err) => console.error("titlebar drag failed:", err));
+  };
+
   return (
     <div class="app">
-      <TabStrip />
-      <TerminalArea />
+      <div class="titlebar" onMouseDown={onTitlebarMouseDown} />
+      <div class="app-body">
+        <Sidebar />
+        <TerminalArea />
+      </div>
+      <StatusBar />
       <IssuePicker />
       <CommandPalette />
       <SetupPanel />

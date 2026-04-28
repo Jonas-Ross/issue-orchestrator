@@ -27,7 +27,7 @@ export function CommandPalette() {
     out.push({
       id: "new-issue",
       label: "New issue session",
-      hint: "⌘T",
+      hint: "⌘N",
       run: () => {
         closePalette();
         openPicker();
@@ -101,7 +101,7 @@ export function CommandPalette() {
         <input
           ref={inputRef}
           class="palette-input"
-          placeholder="Type a command or session title…"
+          placeholder="Switch session, run command, open issue…"
           value={query}
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
           onKeyDown={onKeyDown}

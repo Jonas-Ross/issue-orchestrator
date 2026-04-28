@@ -1,0 +1,76 @@
+/* issue-orchestrator — design tokens (mirror of design/tokens.ts).
+   Single source of truth for color, spacing, motion. */
+:root {
+  /* surfaces */
+  --bg-deep: #0b0c0e;
+  --bg-chrome: #131418;
+  --bg-elev: #1a1c21;
+  --bg-elev2: #22262d;
+  --bg-overlay: rgba(6, 7, 9, 0.55);
+
+  /* lines */
+  --line-1: #1f2228;
+  --line-2: #2a2d34;
+
+  /* text */
+  --text-1: #e6e8ee;
+  --text-2: #8a8f99;
+  --text-3: #5a5e68;
+  --text-4: #3f434b;
+
+  /* status (load-bearing) */
+  --status-needs: #86efac;
+  --status-running: #3fb950;
+  --status-idle: #5d8eff;
+  --status-exited: #e5534b;
+  --status-spawning: #8b8e93;
+  --status-needs-bg: rgba(134, 239, 172, 0.10);
+  --status-needs-bg-strong: rgba(134, 239, 172, 0.13);
+  --status-needs-rail: rgba(134, 239, 172, 0.45);
+  --status-needs-badge-fg: #0a1a10;
+
+  /* accent (affordances only) */
+  --accent: #6ea8fe;
+  --accent-dim: #2a3954;
+  --accent-soft: rgba(110, 168, 254, 0.06);
+  --accent-on: #06101f;
+
+  /* type */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Menlo, Monaco, monospace;
+
+  /* space */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 18px;
+  --space-8: 24px;
+  --space-9: 36px;
+
+  /* radius */
+  --radius-1: 3px;
+  --radius-2: 4px;
+  --radius-3: 6px;
+  --radius-4: 8px;
+  --radius-5: 10px;
+
+  /* density */
+  --sidebar-expanded: 280px;
+  --sidebar-collapsed: 48px;
+  --status-bar-h: 24px;
+  --row-h: 56px;
+  --row-h-collapsed: 44px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --dur-micro: 120ms;
+  --dur-modal: 140ms;
+  --dur-reveal: 180ms;
+  --dur-ring: 600ms;
+  --dur-breath: 1600ms;
+  --dur-row-breath: 3000ms;
+}
