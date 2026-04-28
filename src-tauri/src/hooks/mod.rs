@@ -17,6 +17,27 @@ use crate::registry::RegistryCmd;
 
 use self::log::Logger;
 
+/// On `Notification` events, Claude Code distinguishes between a real
+/// permission prompt (blocking on the user) and the 60s inactivity
+/// reminder. They get different status mappings so calm sessions don't
+/// pulse mint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationKind {
+    PermissionPrompt,
+    IdlePrompt,
+    Other,
+}
+
+impl NotificationKind {
+    fn parse(s: &str) -> Self {
+        match s {
+            "permission_prompt" => Self::PermissionPrompt,
+            "idle_prompt" => Self::IdlePrompt,
+            _ => Self::Other,
+        }
+    }
+}
+
 /// One hook event from Claude Code. We keep both a normalized view (for
 /// the actor's status logic) and the raw payload (for the audit log,
 /// which preserves any fields we don't yet care about).
@@ -27,28 +48,24 @@ pub struct HookEvent {
     pub claude_session_id: Option<String>,
     pub cwd: Option<String>,
     pub transcript_path: Option<String>,
+    pub notification_kind: Option<NotificationKind>,
     pub raw: Value,
 }
 
 impl HookEvent {
     pub fn from_value(v: Value) -> Option<Self> {
         let obj = v.as_object()?;
-        let name = obj.get("hook_event_name")?.as_str()?.to_owned();
+        let s = |k: &str| obj.get(k).and_then(Value::as_str).map(str::to_owned);
         Some(Self {
-            hook_event_name: name,
-            session_orch_id: obj
-                .get("session_orch_id")
+            hook_event_name: s("hook_event_name")?,
+            session_orch_id: s("session_orch_id"),
+            claude_session_id: s("session_id"),
+            cwd: s("cwd"),
+            transcript_path: s("transcript_path"),
+            notification_kind: obj
+                .get("notification_type")
                 .and_then(Value::as_str)
-                .map(str::to_owned),
-            claude_session_id: obj
-                .get("session_id")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-            cwd: obj.get("cwd").and_then(Value::as_str).map(str::to_owned),
-            transcript_path: obj
-                .get("transcript_path")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
+                .map(NotificationKind::parse),
             raw: v,
         })
     }

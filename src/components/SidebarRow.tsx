@@ -31,6 +31,7 @@ export function SidebarRow({ session, collapsed }: Props) {
   const isNeeds = session.status === "needs_input";
   const isShell = !session.issueUrl && !session.branch;
   const issueNum = issueNumberFromUrl(session.issueUrl);
+  const branchOrPath = session.branch ?? session.worktreePath ?? "—";
 
   const onSelect = () => {
     activeId.value = session.id;
@@ -105,7 +106,7 @@ export function SidebarRow({ session, collapsed }: Props) {
       <div class="sb-row-line1">
         <StatusDot status={session.status} size={7} pulse={isNeeds} />
         {issueNum && <span class="sb-row-num">#{issueNum}</span>}
-        <span class="sb-row-title">{session.title}</span>
+        <span class="sb-row-title" title={session.title}>{session.title}</span>
         {session.issueUrl && (
           <a
             class="sb-row-extlink"
@@ -140,8 +141,8 @@ export function SidebarRow({ session, collapsed }: Props) {
 
       {!isShell && (
         <div class="sb-row-line3">
-          <span class="sb-row-branch">
-            {session.branch ?? session.worktreePath ?? "—"}
+          <span class="sb-row-branch" title={branchOrPath}>
+            {branchOrPath}
           </span>
         </div>
       )}

@@ -77,13 +77,16 @@ select:focus-visible {
   min-width: 0;
 }
 
-/* Custom title bar (macOS Overlay style — traffic lights overlay this strip).
-   Uses chrome bg so the sidebar appears unified with the title bar. */
+/* user-select:none stops a missed drag (e.g. permission revoked) from
+   silently highlighting page text instead. */
 .titlebar {
   height: 32px;
   flex-shrink: 0;
   background: var(--bg-chrome);
   border-bottom: 1px solid var(--line-1);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────── */
@@ -501,20 +504,23 @@ select:focus-visible {
 }
 .status-bar-title {
   color: var(--text-1);
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .status-bar-sep {
   color: var(--text-3);
+  flex-shrink: 0;
 }
 .status-bar-branch {
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 320px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .status-bar-spacer {
   flex: 1;

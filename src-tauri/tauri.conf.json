@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "issue-orchestrator",
+  "productName": "Issue Orchestrator",
   "version": "0.1.0",
   "identifier": "dev.jonasross.issue-orchestrator",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "issue-orchestrator",
+        "title": "Issue Orchestrator",
         "width": 1200,
         "height": 800,
         "titleBarStyle": "Overlay",

@@ -15,7 +15,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::hooks::HookEvent;
+use crate::hooks::{HookEvent, NotificationKind};
 use crate::pty::{self, PtyEvent};
 
 use self::session::Session;
@@ -174,7 +174,12 @@ impl SessionRegistryActor {
         }
         let new_status = match evt.hook_event_name.as_str() {
             "SessionStart" => Status::Running,
-            "Notification" => Status::NeedsInput,
+            // Notification is overloaded: idle_prompt is the 60s reminder,
+            // not a real "awaiting input" — must not pulse mint.
+            "Notification" => match evt.notification_kind {
+                Some(NotificationKind::IdlePrompt) => Status::Idle,
+                _ => Status::NeedsInput,
+            },
             "Stop" => Status::Idle,
             "SessionEnd" => Status::Exited,
             _ => return,

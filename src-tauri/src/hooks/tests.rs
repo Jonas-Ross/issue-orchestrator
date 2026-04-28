@@ -131,6 +131,58 @@ async fn hook_routes_status_change_to_session() {
 }
 
 #[tokio::test]
+async fn notification_idle_prompt_maps_to_idle_not_needs_input() {
+    let dir = tempdir().expect("tempdir");
+    let sock = dir.path().join("hooks.sock");
+    let log = dir.path().join("events.jsonl");
+
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let cmd_tx = SessionRegistryActor::spawn(event_tx);
+
+    {
+        let sock = sock.clone();
+        let log = log.clone();
+        let cmd_tx = cmd_tx.clone();
+        tokio::spawn(async move {
+            let _ = run_listener(sock, log, cmd_tx).await;
+        });
+    }
+
+    let summary = spawn_bash(&cmd_tx).await;
+
+    // The 60s "Claude is waiting for your input" idle reminder should
+    // surface as Idle, not NeedsInput — otherwise calm sessions pulse mint.
+    send_hook(
+        &sock,
+        json!({
+            "hook_event_name": "Notification",
+            "session_id": "claude-1",
+            "session_orch_id": summary.id,
+            "notification_type": "idle_prompt",
+            "message": "Claude is waiting for your input",
+        }),
+    )
+    .await;
+    let status = wait_for_status_change(&mut event_rx, &summary.id).await;
+    assert_eq!(status, Status::Idle);
+
+    // permission_prompt should still pulse mint.
+    send_hook(
+        &sock,
+        json!({
+            "hook_event_name": "Notification",
+            "session_id": "claude-1",
+            "session_orch_id": summary.id,
+            "notification_type": "permission_prompt",
+            "message": "Claude Code needs your attention",
+        }),
+    )
+    .await;
+    let status = wait_for_status_change(&mut event_rx, &summary.id).await;
+    assert_eq!(status, Status::NeedsInput);
+}
+
+#[tokio::test]
 async fn pretty_printed_hook_payload_parses() {
     let dir = tempdir().expect("tempdir");
     let sock = dir.path().join("hooks.sock");

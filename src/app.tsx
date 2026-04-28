@@ -1,4 +1,5 @@
 import { useEffect } from "preact/hooks";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { commands, events } from "./lib/bindings";
 import { addSession, removeSession, setStatus } from "./state/sessions";
 import { startPtyStream } from "./state/pty-stream";
@@ -53,9 +54,18 @@ export function App() {
     };
   }, []);
 
+  // startDragging() requires core:window:allow-start-dragging in
+  // capabilities/default.json — easy to break in another file.
+  const onTitlebarMouseDown = (e: MouseEvent) => {
+    if (e.buttons !== 1) return;
+    const win = getCurrentWindow();
+    const op = e.detail === 2 ? win.toggleMaximize() : win.startDragging();
+    op.catch((err) => console.error("titlebar drag failed:", err));
+  };
+
   return (
     <div class="app">
-      <div class="titlebar" data-tauri-drag-region />
+      <div class="titlebar" onMouseDown={onTitlebarMouseDown} />
       <div class="app-body">
         <Sidebar />
         <TerminalArea />
