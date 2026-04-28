@@ -61,10 +61,14 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
     }
   };
 
-  // Park focus on the modal container before the first priority
-  // element renders, then trap Tab inside and restore focus on close.
+  // Park focus on the modal as a fallback only — ref-attach handlers
+  // (the select dropdown / search input) run during commit and may have
+  // already claimed focus before this effect fires. Stealing it back
+  // would defeat the priority-focus logic.
   useEffect(() => {
-    modalRef.current?.focus();
+    if (!focusedOnce.current) {
+      modalRef.current?.focus();
+    }
   }, []);
   useFocusRestore();
   useFocusTrap(modalRef);
