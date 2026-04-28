@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { commands } from "../lib/bindings";
 import type { Config } from "../lib/bindings";
+import { useFocusRestore, useFocusTrap } from "../lib/use-focus-trap";
 import {
   closeSettings,
   settings,
@@ -46,49 +47,10 @@ function SettingsPanelInner() {
   const active = CATEGORIES.find((c) => c.id === activeId) ?? CATEGORIES[0];
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
     modalRef.current?.focus();
-    return () => {
-      previous?.focus?.();
-    };
   }, []);
-
-  // Focus trap so Tab can't escape into the sidebar behind the overlay.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const root = modalRef.current;
-      if (!root) return;
-      const focusables = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusables.length === 0) {
-        e.preventDefault();
-        root.focus();
-        return;
-      }
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const current = document.activeElement as HTMLElement | null;
-      const insideModal = current && root.contains(current);
-      if (!insideModal) {
-        e.preventDefault();
-        (e.shiftKey ? last : first).focus();
-        return;
-      }
-      if (e.shiftKey && current === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && current === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  useFocusRestore();
+  useFocusTrap(modalRef);
 
   return (
     <div class="modal-overlay" onClick={() => closeSettings()}>

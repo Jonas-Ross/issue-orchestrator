@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { open } from "@tauri-apps/plugin-shell";
 import { commands } from "../lib/bindings";
-import type { Decision, Issue, RepoEntry } from "../lib/bindings";
+import type { Decision, Issue } from "../lib/bindings";
+import { useFocusRestore, useFocusTrap } from "../lib/use-focus-trap";
 import { activeId } from "../state/sessions";
 import { closePicker, pickerOpen } from "../state/picker";
 import { openContextMenu } from "../state/context-menu";
+import { loadRepos, repos as reposSignal } from "../state/repos";
 
 type IssueState =
   | { tag: "idle" }
@@ -23,7 +25,7 @@ export function IssuePicker() {
 }
 
 function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
-  const [repos, setRepos] = useState<RepoEntry[] | null>(null);
+  const repos = reposSignal.value;
   const [reposError, setReposError] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(prefilledRepo);
   const [issues, setIssues] = useState<IssueState>({ tag: "idle" });
@@ -59,77 +61,29 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
     }
   };
 
-  // Focus trap + restore. Save whatever was focused before opening the
-  // picker (typically the active terminal) and put focus back when the
-  // modal unmounts. Without this, Tab inside the modal can leak to the
-  // sidebar behind the overlay.
+  // Park focus on the modal container before the first priority
+  // element renders, then trap Tab inside and restore focus on close.
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    // Make the modal container itself focusable so we have somewhere to
-    // park focus before the first priority element renders.
     modalRef.current?.focus();
-    return () => {
-      previous?.focus?.();
-    };
   }, []);
+  useFocusRestore();
+  useFocusTrap(modalRef);
 
+  // Drawer-launched picker has the repo fixed; the global signal is
+  // already loaded at app boot, so we just refresh on every open in case
+  // the user added/removed a repo with the picker closed.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const root = modalRef.current;
-      if (!root) return;
-      const focusables = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), select:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((el) => el.offsetParent !== null || el === root);
-      if (focusables.length === 0) {
-        e.preventDefault();
-        root.focus();
-        return;
-      }
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      const insideModal = active && root.contains(active);
-      if (!insideModal) {
-        e.preventDefault();
-        (e.shiftKey ? last : first).focus();
-        return;
-      }
-      if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
-
-  useEffect(() => {
-    if (prefilledRepo) {
-      // Drawer-launched picker: repo is fixed; we don't need to load the
-      // repo list at all (no dropdown is shown).
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const result = await commands.listRepos();
-      if (cancelled) return;
-      if (result.status === "error") {
-        setReposError(result.error);
-        return;
-      }
-      setRepos(result.data);
-      if (result.data.length === 1) setSelectedRepo(result.data[0].name);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (prefilledRepo) return;
+    loadRepos().catch((e) => setReposError(String(e)));
   }, [prefilledRepo]);
+
+  // Auto-select the only repo so the picker skips straight to issues.
+  useEffect(() => {
+    if (prefilledRepo) return;
+    if (repos.length === 1 && selectedRepo === null) {
+      setSelectedRepo(repos[0].name);
+    }
+  }, [repos, prefilledRepo, selectedRepo]);
 
   useEffect(() => {
     if (!selectedRepo) return;
@@ -183,17 +137,16 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
     }
   }, [recommendation, filteredIssues]);
 
-  // Clamp highlight when the filtered set shrinks (search typing) so we
-  // never reference an out-of-range index.
+  // Clamp highlight when the filtered set shrinks (search typing). Reads
+  // `highlightedIndex` via the functional setter so it doesn't need to be
+  // a dependency — otherwise this effect would re-fire on every arrow key.
   useEffect(() => {
-    if (filteredIssues.length === 0) {
-      if (highlightedIndex !== 0) setHighlightedIndex(0);
-      return;
-    }
-    if (highlightedIndex >= filteredIssues.length) {
-      setHighlightedIndex(filteredIssues.length - 1);
-    }
-  }, [filteredIssues, highlightedIndex]);
+    setHighlightedIndex((i) => {
+      if (filteredIssues.length === 0) return 0;
+      if (i >= filteredIssues.length) return filteredIssues.length - 1;
+      return i;
+    });
+  }, [filteredIssues]);
 
   // Auto-scroll the highlighted issue into view as the user arrows.
   useEffect(() => {
@@ -355,12 +308,12 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
         {!prefilledRepo && reposError && (
           <p class="error">Failed to load repos: {reposError}</p>
         )}
-        {!prefilledRepo && !reposError && repos && repos.length === 0 && (
+        {!prefilledRepo && !reposError && repos.length === 0 && (
           <p class="hint">
             No repos configured. Use the sidebar's "+ Add repo…" to register one.
           </p>
         )}
-        {!prefilledRepo && repos && repos.length > 1 && (
+        {!prefilledRepo && repos.length > 1 && (
           <div class="row">
             <label>
               Repo:{" "}
