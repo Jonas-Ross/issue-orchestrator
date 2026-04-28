@@ -183,6 +183,44 @@ pub fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoEntry>, String> 
 
 #[tauri::command]
 #[specta::specta]
+pub fn add_repo(state: State<'_, AppState>, path: String) -> Result<RepoEntry, String> {
+    let path = PathBuf::from(&path);
+    spawn::validate_git_repo(&path).map_err(|e| e.to_string())?;
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    let entry = config.add_repo(&path).map_err(|e| e.to_string())?;
+    config.save(&state.config_path).map_err(|e| e.to_string())?;
+    Ok(entry)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn remove_repo(state: State<'_, AppState>, name: String) -> Result<(), String> {
+    let (tx, rx) = oneshot::channel();
+    state
+        .registry
+        .send(RegistryCmd::List { reply: tx })
+        .await
+        .map_err(|e| e.to_string())?;
+    let sessions = rx.await.map_err(|e| e.to_string())?;
+    let live: Vec<String> = sessions
+        .iter()
+        .filter(|s| s.repo_name.as_deref() == Some(&name))
+        .map(|s| s.id.clone())
+        .collect();
+    if !live.is_empty() {
+        return Err(format!(
+            "Kill this repo's sessions first: {}",
+            live.join(", ")
+        ));
+    }
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.remove_repo(&name).map_err(|e| e.to_string())?;
+    config.save(&state.config_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn list_issues(
     state: State<'_, AppState>,
     repo_name: String,

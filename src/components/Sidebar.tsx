@@ -1,10 +1,12 @@
 import { commands } from "../lib/bindings";
-import { sessions } from "../state/sessions";
-import { openPicker } from "../state/picker";
+import { sessions, sessionsByRepo, SHELL_BUCKET } from "../state/sessions";
+import { repos } from "../state/repos";
 import { sidebarCollapsed, toggleSidebar } from "../state/sidebar";
+import { openSettings } from "../state/settings";
 import { SidebarRow } from "./SidebarRow";
+import { RepoDrawer } from "./RepoDrawer";
+import { AddRepoButton } from "./AddRepoButton";
 import { StatusDot } from "./StatusDot";
-import { Kbd } from "./Kbd";
 
 async function spawnBash() {
   const result = await commands.ptySpawn(80, 24);
@@ -16,6 +18,8 @@ async function spawnBash() {
 export function Sidebar() {
   const collapsed = sidebarCollapsed.value;
   const list = sessions.value;
+  const repoList = repos.value;
+  const grouped = sessionsByRepo.value;
   const counts = {
     needs: list.filter((s) => s.status === "needs_input").length,
     running: list.filter((s) => s.status === "running").length,
@@ -32,14 +36,6 @@ export function Sidebar() {
           onClick={toggleSidebar}
         >
           ›
-        </button>
-        <button
-          type="button"
-          class="sb-iconbtn"
-          title="New session (⌘N)"
-          onClick={() => openPicker()}
-        >
-          ＋
         </button>
         {counts.needs > 0 && (
           <div class="sb-needs-pill" title={`${counts.needs} need you`}>
@@ -62,6 +58,8 @@ export function Sidebar() {
       </aside>
     );
   }
+
+  const shellSessions = grouped.get(SHELL_BUCKET) ?? [];
 
   return (
     <aside class="sb">
@@ -96,36 +94,62 @@ export function Sidebar() {
         </div>
       </header>
 
-      <div class="sb-actions">
-        <button
-          type="button"
-          class="sb-action-new"
-          onClick={() => openPicker()}
-          title="Spawn a session from a GitHub issue"
-        >
-          <span class="sb-action-glyph">＋</span>
-          <span class="sb-action-label">New session</span>
-          <Kbd>⌘ N</Kbd>
-        </button>
-        <button
-          type="button"
-          class="sb-action-shell"
-          onClick={() => void spawnBash()}
-          title="Spawn a plain bash tab (⌘⇧B)"
-        >
-          ⌘
-        </button>
-      </div>
-
       <div class="sb-rows">
-        {list.map((s) => (
-          <SidebarRow key={s.id} session={s} collapsed={false} />
-        ))}
+        {repoList.length === 0 ? (
+          <div class="sb-empty">
+            <p class="sb-empty-title">No repos yet</p>
+            <AddRepoButton variant="primary" />
+          </div>
+        ) : (
+          <>
+            {repoList.map((r) => (
+              <RepoDrawer
+                key={r.name}
+                repo={r}
+                sessions={grouped.get(r.name) ?? []}
+              />
+            ))}
+
+            {shellSessions.length > 0 && (
+              <div class="repo-drawer expanded shell-drawer">
+                <div class="repo-drawer-header">
+                  <span class="repo-drawer-caret">▾</span>
+                  <span class="repo-drawer-name">Debug shells</span>
+                  <span class="repo-drawer-count">{shellSessions.length}</span>
+                </div>
+                <div class="repo-drawer-body">
+                  {shellSessions.map((s) => (
+                    <SidebarRow key={s.id} session={s} collapsed={false} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <AddRepoButton variant="tile" />
+          </>
+        )}
       </div>
 
       <footer class="sb-footer">
         <span class="sb-footer-dot" />
         <span>hooks · up</span>
+        <span class="sb-spacer" />
+        <button
+          type="button"
+          class="sb-footer-btn"
+          title="Settings (⌘,)"
+          onClick={() => openSettings()}
+        >
+          ⚙
+        </button>
+        <button
+          type="button"
+          class="sb-footer-btn sb-action-shell"
+          title="Debug bash (⌘⇧B)"
+          onClick={() => void spawnBash()}
+        >
+          ⌘
+        </button>
       </footer>
     </aside>
   );

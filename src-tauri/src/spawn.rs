@@ -16,6 +16,28 @@ use crate::registry::{RegistryCmd, SessionSummary, SpawnSpec};
 #[cfg(test)]
 mod tests;
 
+/// Cheap check that a path looks like a git working copy. Accepts both
+/// regular repos (`.git/` directory) and linked worktrees (`.git` file
+/// pointing into the parent's worktrees dir). We don't shell out to
+/// `git`: presence of `.git` is enough to fail fast on obvious mistakes
+/// like adding a parent dir or a non-repo folder. Real `git` errors
+/// later in the spawn flow surface their own messages.
+pub fn validate_git_repo(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Err(Error::Config(format!("path not found: {}", path.display())));
+    }
+    if !path.is_dir() {
+        return Err(Error::Config(format!("not a directory: {}", path.display())));
+    }
+    if !path.join(".git").exists() {
+        return Err(Error::Config(format!(
+            "not a git repo (no .git): {}",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Type, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Issue {
@@ -254,6 +276,7 @@ pub async fn spawn_issue_session(
                 title,
                 issue_url: Some(issue.url.clone()),
                 branch: Some(branch.clone()),
+                repo_name: repo.name.clone(),
             },
             cols,
             rows,
