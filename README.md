@@ -1,17 +1,43 @@
 # issue-orchestrator
 
-Single-window desktop app for running and watching multiple Claude Code
-`issue-team` sessions in parallel. Embedded terminals via Tauri 2 + Rust +
-xterm.js + Preact. Goal: stop juggling tmux panes and Terminal.app windows.
+A single-window desktop app for running and watching many Claude Code
+`issue-team` sessions in parallel — each in its own `git worktree`,
+each with a live status pill driven by Claude's hook system.
 
-**Status:** M1–M4 landed. The app spawns N orchestrated `claude` sessions
-in their own git worktrees, surfaces per-tab status driven by Claude Code's
-hook system, and fully decouples its core from any Tauri-specific state so
-the registry, hook receiver, and spawn flow are all unit-tested.
+Stop juggling tmux panes and Terminal.app windows.
 
-## Run it
+> **Status:** working day-to-day. Tauri 2 + Rust + Preact + xterm.js,
+> macOS only. The registry, hook receiver, and spawn flow are all
+> unit-tested.
 
-One-time:
+---
+
+## What you get
+
+- **N sessions, one window.** Each issue picks an open `claude` session
+  in its own worktree; switch between them in the sidebar.
+- **Live status per session.** Hook-driven pills:
+  green = running, mint = needs input, blue = idle, red = exited.
+- **Native notifications when Claude needs you.** Background sessions
+  that flip to *needs input* fire a macOS notification and bounce the
+  dock icon — so you can let three sessions run, get pulled back only
+  for the one that's blocked.
+- **Issue picker with multi-repo support.** ⌘N opens a fuzzy-searchable
+  list of open issues across every configured repo.
+- **Command palette.** ⌘K for quick switching, killing, spawning
+  without leaving the keyboard.
+- **First-run setup panel.** Walks you through pasting the hook
+  snippet into `~/.claude/settings.json` — no manual digging.
+- **In-app settings.** ⌘, to add/remove repos, change the worktree
+  root, re-open the setup snippet.
+- **Clean shutdown.** Cmd-Q kills every PTY; no orphaned `claude` or
+  `bash` left behind.
+
+---
+
+## Install
+
+One-time prereqs:
 
 ```bash
 # Rust toolchain
@@ -23,7 +49,7 @@ cargo install tauri-cli --version "^2.0" --locked
 # Frontend deps
 npm install
 
-# A few CLIs the app shells out to:
+# CLIs the app shells out to
 brew install gh jq
 gh auth login
 ```
@@ -34,22 +60,82 @@ Dev loop:
 cargo tauri dev
 ```
 
-The first build is slow (Tauri pulls in webkit bindings + the new dep tree
-including specta and tokio process). Subsequent rebuilds are seconds.
+The first build is slow (Tauri pulls in webkit bindings + the Rust dep
+tree); subsequent rebuilds are seconds.
 
-## Configure
+---
+
+## First-run setup
 
 On first launch the app writes:
 
 ```
 ~/Library/Application Support/dev.jonasross.issue-orchestrator/
 ├── config.json     # repos, worktree root, setup flag
-├── hook.sh         # Generated; do not edit
+├── hook.sh         # Generated; do not edit (rewritten on each app start)
 ├── hooks.sock      # UDS, recreated on each app start
 └── events.jsonl    # Append-only audit log of every hook event
 ```
 
-Edit `config.json` to add the repos you want to spawn issues from:
+A **Setup panel** appears with the JSON to paste into
+`~/.claude/settings.json` so Claude Code's hooks forward
+`SessionStart` / `Notification` / `Stop` / `SessionEnd` events to the
+app's UDS.
+
+Without that wiring the per-session status pill stays gray. With it,
+the pill flips through running / needs-input / idle as Claude works.
+
+> The snippet single-quotes the script path because macOS's
+> `~/Library/Application Support/` contains a space and Claude Code
+> pipes the command through `/bin/sh -c`. If you hand-edit the entry,
+> keep the quotes.
+
+You can re-open the setup snippet any time from **Settings → About**.
+
+---
+
+## Daily use
+
+1. **Add a repo.** Open Settings (⌘,) → Repos → "Add repo", point it
+   at any local clone you have `gh auth` set up for.
+2. **Open an issue.** ⌘N → pick a repo → click an issue. The app:
+   - `gh issue view` to grab the title
+   - `git worktree add` (reusing `issue-<n>` if it exists, else
+     creating a fresh branch under `<worktreeRoot>/<repoName>-issue-<n>`)
+   - spawns `claude` in that worktree with
+     `ISSUE_ORCH_SESSION_ID=<uuid>` and the prompt
+     `"Use the issue-team skill to implement issue #<n>."`
+3. **Watch.** As Claude runs, the sidebar pill cycles through the
+   four states. If a session goes mint (*needs input*) while you're
+   in another session, you'll get a desktop notification.
+4. **Switch.** ⌘1…⌘9 to jump to a session, ⌘[ / ⌘] to step.
+5. **Close.** ⌘W closes the active session (kills the PTY; the
+   worktree and branch stay).
+
+---
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| ⌘N | Open issue picker |
+| ⌘K | Open command palette |
+| ⌘, | Open settings |
+| ⌘B | Toggle sidebar |
+| ⌘W | Kill active session |
+| ⌘1 … ⌘9 | Switch to session N |
+| ⌘[ / ⌘] | Previous / next session |
+| ⌘⇧B | Spawn a debug bash session |
+| Esc | Close any open modal / palette / menu |
+
+All bindings require `metaKey`, so plain typing in the terminal is
+never intercepted.
+
+---
+
+## Configuration
+
+`~/Library/Application Support/dev.jonasross.issue-orchestrator/config.json`:
 
 ```jsonc
 {
@@ -58,71 +144,57 @@ Edit `config.json` to add the repos you want to spawn issues from:
   "repos": [
     { "name": "issue-team", "path": "/Users/you/Documents/GitHub/issue-team" }
   ],
-  "setupDone": false
+  "setupDone": true
 }
 ```
 
-Then restart the app. The `+` button in the tab strip opens the issue
-picker; click an issue and the app:
+Edit through the in-app Settings panel rather than the file directly —
+the app does atomic save (write-to-temp + rename) and the panel
+validates paths.
 
-1. `gh issue view` to grab the title
-2. `git worktree add` either reusing `issue-<n>` or creating a fresh
-   branch under `<worktreeRoot>/<repoName>-issue-<n>`
-3. spawns `claude` in that worktree with `ISSUE_ORCH_SESSION_ID=<uuid>`
-   and the prompt `"Use the issue-team skill to implement issue #<n>."`
+---
 
-The first time the app runs, a setup panel shows the JSON to paste into
-`~/.claude/settings.json` so Claude Code's hooks forward
-SessionStart/Notification/Stop/SessionEnd events to the app's UDS. Without
-that wiring the per-tab status pill stays gray; with it the pill flips
-green/amber/blue as Claude works.
+## Architecture
 
-The snippet single-quotes the script path because macOS's
-`~/Library/Application Support/` contains a space and Claude Code pipes
-the command through `/bin/sh -c`. If you hand-edit the entry, keep the
-quotes.
+See [CLAUDE.md](CLAUDE.md) for the full tour. The short version:
 
-## What lives where
+- **Actor-owned registry** (`src-tauri/src/registry/`) is the single
+  owner of all session state. Mutations go through a `tokio::mpsc`
+  mailbox; no shared `Mutex<HashMap>`.
+- **Typed IPC contract** via `specta` + `tauri-specta`. The Rust
+  command/event surface generates `src/lib/bindings.ts` (gitignored,
+  regenerated on every dev launch). Add a command? `cargo tauri dev`
+  catches drift at TS compile time.
+- **Hook bridge** (`src-tauri/src/hooks/`): Claude Code → `hook.sh` →
+  `nc -U hooks.sock` → tokio `UnixListener` → `RegistryCmd::HookEvent`
+  → status pill updates in the UI. Correlation key is the
+  `ISSUE_ORCH_SESSION_ID` env var, not cwd, so users can `cd` freely.
+- **PTY layer** (`src-tauri/src/pty.rs`): stateless `spawn_pty`,
+  blocking reader on `std::thread`, UTF-8 leftover-byte buffer so
+  multibyte glyphs split across reads aren't mangled.
 
-| Path | Role |
-|---|---|
-| `src-tauri/src/main.rs` | Thin entry — calls `lib::run()` |
-| `src-tauri/src/lib.rs` | Tauri builder, registers commands and event bridge |
-| `src-tauri/src/pty.rs` | Stateless `spawn_pty` + UTF-8 leftover-byte buffer |
-| `src-tauri/src/registry/` | `SessionRegistryActor`, `RegistryCmd`, `RegistryEvent` |
-| `src-tauri/src/ipc/` | `#[tauri::command]` surface + Tauri Specta event types |
-| `src-tauri/src/hooks/` | Tokio UDS listener, JSONL log, hook.sh generator |
-| `src-tauri/src/spawn.rs` | `IssueClient` / `GitRunner` traits + `spawn_issue_session` |
-| `src-tauri/src/config.rs` | JSON config load/save with atomic rename |
-| `src-tauri/src/paths.rs` | App-data path helpers |
-| `src-tauri/src/bin/export-bindings.rs` | Regenerates `src/lib/bindings.ts` |
-| `src/main.tsx` / `src/app.tsx` | Preact mount + top-level layout |
-| `src/components/` | TabStrip, Tab, TerminalArea, TerminalView, IssuePicker, SetupPanel |
-| `src/state/` | Signals: sessions, picker, setup; pty-stream demuxer |
-| `src/lib/bindings.ts` | Generated; gitignored |
+```
+src-tauri/src/
+├── main.rs / lib.rs       # Tauri builder, command + event registration
+├── pty.rs                 # Stateless PTY spawn
+├── registry/              # SessionRegistryActor + RegistryCmd / Event
+├── ipc/                   # #[tauri::command] surface, specta event types
+├── hooks/                 # UDS listener, JSONL log, hook.sh generator
+├── spawn/                 # IssueClient + GitRunner traits, spawn_issue_session
+├── config.rs              # JSON config load/save with atomic rename
+├── paths.rs               # App-data path helpers (macOS hardcoded)
+└── bin/export-bindings.rs # Regenerates src/lib/bindings.ts
 
-## Verify M1
+src/
+├── main.tsx / app.tsx     # Preact mount + top-level layout
+├── components/            # Sidebar, TerminalView, IssuePicker, CommandPalette,
+│                          # SettingsPanel, SetupPanel, StatusBar, ContextMenu, …
+├── state/                 # Signals: sessions, repos, picker, palette, settings,
+│                          # setup, sidebar, notifications, keymap, pty-stream
+└── lib/bindings.ts        # GENERATED, gitignored
+```
 
-After `cargo tauri dev`:
-
-1. Window opens; tab strip is empty with `+` and `⌘` buttons.
-2. Click `⌘` → a `bash` tab appears, prompt within ~1s. Type, ctrl-c, etc.
-3. Open a second `bash` tab; switch between → both keep scrollback.
-4. Resize window in either tab → reflows without garbage.
-5. Click × on a tab → PTY killed, no orphaned `bash` in `ps aux`.
-6. Cmd-Q → all sessions cleaned up.
-
-## Verify M3 + M4
-
-1. Edit `config.json` to point at a real repo (any repo with `gh auth`
-   set up will do).
-2. Click `+` → issue picker shows your repo's open issues.
-3. Pick one → tab opens, `claude` boots in
-   `~/dev/worktrees/<repo>-issue-<n>` with the issue-team skill prompted.
-4. As Claude runs, the tab's status pill goes green (Running), amber
-   (NeedsInput when Claude pauses for input), and blue (Idle on Stop).
-5. `tail -f ~/Library/Application\ Support/dev.jonasross.issue-orchestrator/events.jsonl`
-   to watch the raw hook stream.
+---
 
 ## Tests
 
@@ -130,11 +202,45 @@ After `cargo tauri dev`:
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
-Covers:
-- Registry actor: spawn → kill round-trip, write to unknown session,
-  PtyData event flow with a real bash PTY.
-- Hook receiver: status mapping for Notification/Stop, audit log
-  persistence, hooks for unknown sessions ignored.
-- Spawn flow: new-branch path uses `git worktree add -b`, existing-branch
-  uses bare `worktree add`, existing-worktree skips git entirely. Mocks
-  `IssueClient` and `GitRunner` so no `gh` or real worktrees are touched.
+Covers the three pillars:
+
+- **Registry actor** — spawn → kill round-trip, write to unknown
+  session, real-PTY `PtyData` event flow.
+- **Hook receiver** — status mapping for
+  `SessionStart`/`Notification`/`Stop`/`SessionEnd`, audit-log
+  persistence, hooks for unknown sessions silently dropped.
+- **Spawn flow** — new-branch path uses `git worktree add -b`,
+  existing-branch uses bare `worktree add`, existing-worktree skips
+  git entirely. Mocks `IssueClient` and `GitRunner` so no real `gh`
+  or worktrees are touched.
+
+There are no frontend tests yet; UI verification is manual.
+
+### Try it out
+
+After `cargo tauri dev`:
+
+1. Window opens; sidebar empty.
+2. ⌘⇧B → a `bash` session appears, prompt within ~1s. Type, ctrl-c,
+   resize the window — the terminal reflows without garbage.
+3. ⌘⇧B again → second session; ⌘1 / ⌘2 toggles, both keep scrollback.
+4. ⌘W → PTY killed, no orphaned `bash` in `ps aux`.
+5. Configure a repo (Settings → Repos), then ⌘N → pick an issue. A
+   `claude` session boots in
+   `~/dev/worktrees/<repo>-issue-<n>` with the issue-team skill
+   prompted. Pill goes green within a few seconds.
+6. `tail -f ~/Library/Application\ Support/dev.jonasross.issue-orchestrator/events.jsonl`
+   to watch the raw hook stream.
+7. Cmd-Q → all sessions cleaned up.
+
+---
+
+## Out of scope (deliberately)
+
+Don't open PRs adding any of these without discussion first:
+
+- Codesigning / notarization / packaging for distribution
+- Windows or Linux support
+- Cross-machine orchestration
+- Embedded `gh pr` views (the app links out to GitHub instead)
+- Session persistence across app restart

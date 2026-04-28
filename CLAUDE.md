@@ -119,12 +119,12 @@ Backend has unit tests for the three pillars:
   new-branch, existing-branch, and existing-worktree paths.
 
 There are no frontend tests yet; UI verification is manual via the README's
-"Verify M1" / "Verify M3 + M4" checklists.
+verification checklist.
 
 ## Things that are deliberately out of scope
 
-(per `MILESTONES.md`) — do not introduce them speculatively: codesigning /
-notarization, Windows or Linux support, cross-machine orchestration,
-embedded `gh pr` views (link out via `tauri-plugin-shell`'s
-`shell:allow-open` capability instead, scoped to `https://github.com/**`),
-session persistence across app restart.
+Do not introduce these speculatively: codesigning / notarization, Windows
+or Linux support, cross-machine orchestration, embedded `gh pr` views
+(link out via `tauri-plugin-shell`'s `shell:allow-open` capability instead,
+scoped to `https://github.com/**`), session persistence across app
+restart.
