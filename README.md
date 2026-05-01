@@ -26,10 +26,10 @@ Stop juggling tmux panes and Terminal.app windows.
   list of open issues across every configured repo.
 - **Command palette.** ⌘K for quick switching, killing, spawning
   without leaving the keyboard.
-- **First-run setup panel.** Walks you through pasting the hook
-  snippet into `~/.claude/settings.json` — no manual digging.
-- **In-app settings.** ⌘, to add/remove repos, change the worktree
-  root, re-open the setup snippet.
+- **First-run setup panel.** Walks you through installing the
+  Claude Code plugin and adding your first repo.
+- **In-app settings.** ⌘, to add/remove repos and change the
+  worktree root.
 - **Clean shutdown.** Cmd-Q kills every PTY; no orphaned `claude` or
   `bash` left behind.
 
@@ -68,7 +68,9 @@ tree); subsequent rebuilds are seconds.
 ## First-run setup
 
 Hooks ship as a Claude Code plugin so there is nothing to hand-paste.
-In any Claude Code session, run:
+In **any Claude Code session** (a plain `claude` in a terminal works
+fine — the orchestrator app doesn't need to be running for the install
+itself), run these two slash commands:
 
 ```
 /plugin marketplace add Jonas-Ross/issue-orchestrator
@@ -178,7 +180,9 @@ See [CLAUDE.md](CLAUDE.md) for the full tour. The short version:
   command/event surface generates `src/lib/bindings.ts` (gitignored,
   regenerated on every dev launch). Add a command? `cargo tauri dev`
   catches drift at TS compile time.
-- **Hook bridge** (`src-tauri/src/hooks/`): Claude Code → `hook.sh` →
+- **Hook bridge** (`src-tauri/src/hooks/` ← listener;
+  `plugins/issue-orchestrator/scripts/hook.sh` ← script shipped to
+  Claude Code as a plugin): Claude Code → plugin's `hook.sh` →
   `nc -U hooks.sock` → tokio `UnixListener` → `RegistryCmd::HookEvent`
   → status pill updates in the UI. Correlation key is the
   `ISSUE_ORCH_SESSION_ID` env var, not cwd, so users can `cd` freely.
@@ -192,7 +196,8 @@ src-tauri/src/
 ├── pty.rs                 # Stateless PTY spawn
 ├── registry/              # SessionRegistryActor + RegistryCmd / Event
 ├── ipc/                   # #[tauri::command] surface, specta event types
-├── hooks/                 # UDS listener, JSONL log, hook.sh generator
+├── hooks/                 # UDS listener + JSONL audit log
+│                          # (the script itself ships under plugins/)
 ├── spawn/                 # IssueClient + GitRunner traits, spawn_issue_session
 ├── config.rs              # JSON config load/save with atomic rename
 ├── paths.rs               # App-data path helpers (macOS hardcoded)

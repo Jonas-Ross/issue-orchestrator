@@ -726,19 +726,6 @@ select:focus-visible {
   flex: 1;
   margin: 0;
 }
-.setup-panel .snippet-row button {
-  padding: 0 14px;
-  background: var(--bg-elev);
-  color: var(--text-1);
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-2);
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.setup-panel .snippet-row button:hover {
-  background: var(--bg-elev2);
-}
 .setup-panel .hint {
   color: var(--text-3);
   font-size: 12px;
@@ -749,8 +736,8 @@ select:focus-visible {
   justify-content: flex-end;
   margin-top: 16px;
 }
+.setup-panel .snippet-row button,
 .setup-actions button {
-  padding: 6px 14px;
   background: var(--bg-elev);
   color: var(--text-1);
   border: 1px solid var(--line-2);
@@ -758,6 +745,14 @@ select:focus-visible {
   cursor: pointer;
   font-size: 12px;
 }
+.setup-panel .snippet-row button {
+  padding: 0 14px;
+  white-space: nowrap;
+}
+.setup-actions button {
+  padding: 6px 14px;
+}
+.setup-panel .snippet-row button:hover,
 .setup-actions button:hover {
   background: var(--bg-elev2);
 }

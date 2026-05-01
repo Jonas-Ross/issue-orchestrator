@@ -22,11 +22,11 @@ if command -v jq >/dev/null 2>&1; then
   printf '%s' "$payload" \
     | jq -c --arg orch_id "${ISSUE_ORCH_SESSION_ID:-}" \
         'if $orch_id == "" then . else . + {session_orch_id: $orch_id} end' \
-    | nc -U "$sock" -w 1 2>/dev/null || true
+    | nc -U "$sock" -w 1 || true
 else
   # No jq → degraded mode. Listener still tolerates multi-line JSON
   # (it reads the whole connection and lets serde_json stream values),
   # but the orch_id annotation is skipped so non-orch hooks won't
   # correlate.
-  printf '%s' "$payload" | nc -U "$sock" -w 1 2>/dev/null || true
+  printf '%s' "$payload" | nc -U "$sock" -w 1 || true
 fi

@@ -21,7 +21,7 @@ export function SetupPanel() {
       console.error("markSetupDone failed:", result.error);
       return;
     }
-    setupState.value = { ...state, setupDone: true };
+    setupState.value = { setupDone: true };
   };
 
   return (
@@ -75,19 +75,27 @@ function Step1Plugin({ onContinue }: { onContinue: () => void }) {
 }
 
 function CommandRow({ command }: { command: string }) {
+  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command);
+      setStatus("copied");
     } catch (e) {
       console.error("clipboard write failed:", e);
+      setStatus("failed");
     }
+    setTimeout(() => setStatus("idle"), 1500);
   };
+
+  const label =
+    status === "copied" ? "Copied" : status === "failed" ? "Select manually" : "Copy";
 
   return (
     <div class="snippet-row">
       <pre class="snippet">{command}</pre>
       <button type="button" onClick={() => void copy()}>
-        Copy
+        {label}
       </button>
     </div>
   );
