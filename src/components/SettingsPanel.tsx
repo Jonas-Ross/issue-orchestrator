@@ -10,7 +10,6 @@ import {
 } from "../state/settings";
 import { repos } from "../state/repos";
 import { sessions } from "../state/sessions";
-import { setupState } from "../state/setup";
 
 /// Thin wrapper that mounts/unmounts the inner panel around the open
 /// signal. Same pattern as IssuePicker — keeps hooks contract clean.
@@ -114,7 +113,6 @@ function ReposSection() {
 }
 
 function AboutSection() {
-  const setup = setupState.value;
   const repoCount = repos.value.length;
   const sessionCount = sessions.value.length;
   const [config, setConfig] = useState<Config | null>(null);
@@ -132,11 +130,6 @@ function AboutSection() {
       <InfoRow
         label="Worktree root"
         value={config?.worktreeRoot ?? "Loading…"}
-        mono
-      />
-      <InfoRow
-        label="Hook script"
-        value={setup?.hookScriptPath ?? "Not loaded"}
         mono
       />
       <InfoRow label="Configured repos" value={String(repoCount)} />

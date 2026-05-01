@@ -61,13 +61,6 @@ pub fn run() {
     let config_path = paths::config_path().expect("compute config path");
     let sock_path = paths::hooks_socket_path().expect("compute hooks socket path");
     let log_path = paths::hooks_log_path().expect("compute hooks log path");
-    let hook_script_path = paths::hook_script_path().expect("compute hook script path");
-
-    if let Err(e) = hooks::script::ensure_hook_script(&hook_script_path) {
-        warn!(?e, "failed to write hook script");
-    } else {
-        info!(path = %hook_script_path.display(), "hook script ready");
-    }
 
     let config = config::Config::load_or_default(&config_path).unwrap_or_else(|e| {
         warn!(?e, "config load failed; using defaults");
@@ -102,7 +95,6 @@ pub fn run() {
             app.manage(ipc::AppState {
                 registry: registry_tx,
                 config_path: config_path.clone(),
-                hook_script_path: hook_script_path.clone(),
                 config: Mutex::new(config.clone()),
                 issue_client: Arc::new(spawn::GhCli),
                 git_runner: Arc::new(spawn::GitCli),

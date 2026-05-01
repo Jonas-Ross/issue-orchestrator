@@ -52,21 +52,39 @@ see it.
 
 ### Hook bridge (Claude Code → app)
 
-Path: Claude session fires hook → `~/.claude/settings.json` invokes
-`<app-data>/hook.sh` (generated from `src-tauri/src/hooks/hook.sh.template`,
-rewritten on every app start) → script pipes JSON through `jq -c` to inject
-`session_orch_id` from `$ISSUE_ORCH_SESSION_ID` and `nc -U`s it to
-`hooks.sock` → `hooks::run_listener` reads the connection (tolerates
-multi-line pretty-printed JSON via `serde_json::Deserializer::from_slice
+Hooks ship as a Claude Code plugin under `plugins/issue-orchestrator/`,
+distributed via the marketplace manifest at `.claude-plugin/marketplace.json`
+in this repo's root. Users install with `/plugin marketplace add
+Jonas-Ross/issue-orchestrator` then `/plugin install
+issue-orchestrator@issue-orchestrator`. Claude Code expands
+`${CLAUDE_PLUGIN_ROOT}` in `plugins/issue-orchestrator/hooks/hooks.json`
+to the plugin's installed directory, so hook entries always point at a
+real script and survive app rename / uninstall without leaving stale
+paths in user-managed `~/.claude/settings.json`.
+
+Path: Claude session fires hook → plugin script
+`${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh` runs → script pipes JSON
+through `jq -c` to inject `session_orch_id` from
+`$ISSUE_ORCH_SESSION_ID` and `nc -U`s it to `hooks.sock` →
+`hooks::run_listener` reads the connection (tolerates multi-line
+pretty-printed JSON via `serde_json::Deserializer::from_slice
 .into_iter`) → `RegistryCmd::HookEvent` → actor maps
 `SessionStart/Notification/Stop/SessionEnd` to `Status` and emits
-`StatusChange`. Hooks for sessions we didn't spawn (no `session_orch_id`)
-are silently dropped.
+`StatusChange`. Hooks for sessions we didn't spawn (no
+`session_orch_id`) are silently dropped. When the app isn't running
+the script's `[ ! -S "$sock" ]` guard exits 0, so non-orchestrator
+Claude sessions are unaffected.
 
 Correlation key is **`ISSUE_ORCH_SESSION_ID`** (env var injected by
 `apply_common_env` in `registry/mod.rs` at PTY spawn time), not `cwd` — so
 the user can `cd` freely without breaking status. Without `jq` installed,
 the listener still parses payloads but correlation is lost.
+
+The script is a static checked-in file — no Rust-side template or
+generator. To change hook behavior edit
+`plugins/issue-orchestrator/scripts/hook.sh` directly and bump the
+plugin version in both `.claude-plugin/marketplace.json` and
+`plugins/issue-orchestrator/.claude-plugin/plugin.json`.
 
 ### Boundary traits for shellouts (`src-tauri/src/spawn.rs`)
 
@@ -100,15 +118,13 @@ session kill — not just on unmount.
 ```
 ~/Library/Application Support/app.issue-orchestrator.desktop/
 ├── config.json     # repos[], worktreeRoot, setupDone — atomic save via .tmp + rename
-├── hook.sh         # generated from hook.sh.template every app start; chmod 0o755
 ├── hooks.sock      # UDS, removed and re-bound on every app start
 └── events.jsonl    # append-only raw hook audit log
 ```
 
-The hook-script path contains a space (`Application Support`). The setup
-panel snippet single-quotes it because Claude Code pipes the hook command
-through `/bin/sh -c`. **Do not lose those quotes** when editing the
-template or the displayed snippet.
+The hook script lives under Claude Code's plugin directory (the user's
+`~/.claude/plugins/...`), not here — see "Hook bridge" above for the
+plugin-distribution model.
 
 ## Test strategy
 
