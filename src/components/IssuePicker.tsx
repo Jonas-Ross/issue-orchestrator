@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { open } from "@tauri-apps/plugin-shell";
 import { commands } from "../lib/bindings";
 import type { Decision, Issue } from "../lib/bindings";
+import { copyToClipboard } from "../lib/clipboard";
 import { useFocusRestore, useFocusTrap } from "../lib/use-focus-trap";
 import { activeId } from "../state/sessions";
 import { closePicker, pickerOpen } from "../state/picker";
@@ -273,11 +274,11 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
         { label: "Open issue ↗", action: () => void open(issue.url) },
         {
           label: "Copy issue link",
-          action: () => void navigator.clipboard.writeText(issue.url),
+          action: () => void copyToClipboard(issue.url),
         },
         {
           label: "Copy branch name",
-          action: () => void navigator.clipboard.writeText(`issue-${issue.number}`),
+          action: () => void copyToClipboard(`issue-${issue.number}`),
         },
       ],
     });

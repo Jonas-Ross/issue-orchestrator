@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { commands } from "../lib/bindings";
+import { copyToClipboard } from "../lib/clipboard";
 import { setupState } from "../state/setup";
 import { repos } from "../state/repos";
 import { AddRepoButton } from "./AddRepoButton";
@@ -78,13 +79,7 @@ function CommandRow({ command }: { command: string }) {
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setStatus("copied");
-    } catch (e) {
-      console.error("clipboard write failed:", e);
-      setStatus("failed");
-    }
+    setStatus((await copyToClipboard(command)) ? "copied" : "failed");
     setTimeout(() => setStatus("idle"), 1500);
   };
 

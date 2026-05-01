@@ -3,6 +3,7 @@ import { openPicker } from "../state/picker";
 import { openContextMenu } from "../state/context-menu";
 import type { ContextMenuItem } from "../state/context-menu";
 import type { RepoEntry, SessionSummary } from "../lib/bindings";
+import { copyToClipboard } from "../lib/clipboard";
 import { SidebarRow } from "./SidebarRow";
 
 interface Props {
@@ -36,7 +37,7 @@ export function RepoDrawer({ repo, sessions }: Props) {
     const items: ContextMenuItem[] = [
       {
         label: "Copy repo path",
-        action: () => void navigator.clipboard.writeText(repo.path),
+        action: () => void copyToClipboard(repo.path),
       },
       { separator: true },
       { label: "Remove repo…", action: () => void onRemove() },
