@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-shell";
 import { commands } from "../lib/bindings";
 import type { SessionSummary } from "../lib/bindings";
+import { copyToClipboard } from "../lib/clipboard";
 import { activeId } from "../state/sessions";
 import { openContextMenu } from "../state/context-menu";
 import type { ContextMenuItem } from "../state/context-menu";
@@ -49,21 +50,21 @@ export function SidebarRow({ session, collapsed }: Props) {
       });
       items.push({
         label: "Copy worktree path",
-        action: () => void navigator.clipboard.writeText(path),
+        action: () => void copyToClipboard(path),
       });
     }
     if (session.branch) {
       const branch = session.branch;
       items.push({
         label: "Copy branch name",
-        action: () => void navigator.clipboard.writeText(branch),
+        action: () => void copyToClipboard(branch),
       });
     }
     if (session.issueUrl) {
       const url = session.issueUrl;
       items.push({
         label: "Copy issue link",
-        action: () => void navigator.clipboard.writeText(url),
+        action: () => void copyToClipboard(url),
       });
       items.push({ label: "Open issue in browser", action: () => void open(url) });
     }
