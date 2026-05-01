@@ -17,7 +17,6 @@ use crate::spawn::{self, Decision, GitRunner, Issue, IssueClient};
 pub struct AppState {
     pub registry: mpsc::Sender<RegistryCmd>,
     pub config_path: PathBuf,
-    pub hook_script_path: PathBuf,
     pub config: Mutex<Config>,
     pub issue_client: Arc<dyn IssueClient>,
     pub git_runner: Arc<dyn GitRunner>,
@@ -143,7 +142,6 @@ pub async fn list_sessions(
 #[serde(rename_all = "camelCase")]
 pub struct SetupState {
     pub setup_done: bool,
-    pub hook_script_path: String,
 }
 
 #[tauri::command]
@@ -152,7 +150,6 @@ pub fn get_setup_state(state: State<'_, AppState>) -> Result<SetupState, String>
     let config = state.config.lock().map_err(|e| e.to_string())?;
     Ok(SetupState {
         setup_done: config.setup_done,
-        hook_script_path: state.hook_script_path.display().to_string(),
     })
 }
 

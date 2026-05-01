@@ -28,7 +28,3 @@ pub fn hooks_socket_path() -> Result<PathBuf> {
 pub fn hooks_log_path() -> Result<PathBuf> {
     Ok(app_data_dir()?.join("events.jsonl"))
 }
-
-pub fn hook_script_path() -> Result<PathBuf> {
-    Ok(app_data_dir()?.join("hook.sh"))
-}

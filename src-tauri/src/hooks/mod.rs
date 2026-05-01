@@ -1,5 +1,4 @@
 pub mod log;
-pub mod script;
 
 #[cfg(test)]
 mod tests;

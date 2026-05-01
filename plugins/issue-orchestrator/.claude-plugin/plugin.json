@@ -1,0 +1,10 @@
+{
+  "name": "issue-orchestrator",
+  "description": "Forwards Claude Code session events to issue-orchestrator over a Unix socket",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jonas Ross",
+    "url": "https://github.com/Jonas-Ross"
+  },
+  "homepage": "https://github.com/Jonas-Ross/issue-orchestrator"
+}
