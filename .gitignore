@@ -14,4 +14,9 @@ src/lib/bindings.ts
 .DS_Store
 
 # Claude Code local config (per-user paths, allowlists, etc.)
-.claude/
+# Default: ignore everything under .claude, then re-include the
+# project-shared bits (settings.json + scripts/) so settings.local.json
+# and other per-user files stay out.
+.claude/*
+!.claude/settings.json
+!.claude/scripts/
