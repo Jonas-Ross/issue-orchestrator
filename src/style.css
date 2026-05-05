@@ -1752,3 +1752,90 @@ a.issue-number:hover {
   display: flex;
   gap: 6px;
 }
+
+/* Per-repo issue provider settings */
+.settings-subhead {
+  margin: 18px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.repo-provider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.repo-provider-row:last-child {
+  border-bottom: 0;
+}
+.repo-provider-summary {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.repo-provider-name {
+  font-size: 13px;
+  color: var(--text-1);
+}
+.repo-provider-current {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.repo-provider-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.repo-provider-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.repo-provider-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.repo-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.repo-provider-field-label {
+  font-size: 11px;
+  color: var(--text-2);
+}
+.repo-provider-input {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: 4px;
+  background: var(--bg-input, var(--bg-chrome));
+  color: var(--text-1);
+}
+.repo-provider-token {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-1);
+}
+.repo-provider-token-status {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.repo-provider-token-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.repo-provider-token-row .repo-provider-input {
+  flex: 1 1 auto;
+}

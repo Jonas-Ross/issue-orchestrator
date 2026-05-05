@@ -2,6 +2,7 @@ pub mod config;
 pub mod error;
 pub mod hooks;
 pub mod ipc;
+pub mod issues;
 pub mod paths;
 pub mod pty;
 pub mod registry;
@@ -47,6 +48,10 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::update_spawn_prompt,
             ipc::optimize_spawn_prompt,
             ipc::spawn_issue_session,
+            ipc::update_repo_provider,
+            ipc::set_provider_secret,
+            ipc::delete_provider_secret,
+            ipc::provider_secret_exists,
         ])
         .events(collect_events![
             ipc::events::PtyData,
@@ -98,8 +103,8 @@ pub fn run() {
                 registry: registry_tx,
                 config_path: config_path.clone(),
                 config: Mutex::new(config.clone()),
-                issue_client: Arc::new(spawn::GhCli),
                 git_runner: Arc::new(spawn::GitCli),
+                http: reqwest::Client::new(),
             });
 
             Ok(())

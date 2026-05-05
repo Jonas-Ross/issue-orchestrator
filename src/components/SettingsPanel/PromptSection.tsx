@@ -94,8 +94,9 @@ export function PromptSection() {
     <div class="prompt-section">
       <p class="settings-row-desc">
         This template runs as the first message of every issue session. Use{" "}
-        <code>{"{issue_number}"}</code> and <code>{"{issue_title}"}</code> as placeholders — they're
-        substituted at spawn time.
+        <code>{"{issue_id}"}</code> and <code>{"{issue_title}"}</code> as placeholders — they're
+        substituted at spawn time. <code>{"{issue_number}"}</code> still works as an alias for{" "}
+        <code>{"{issue_id}"}</code> in older saved templates.
       </p>
       <textarea
         class="prompt-textarea"

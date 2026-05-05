@@ -12,13 +12,13 @@ export interface PromptDraft {
   isDirty: boolean;
   /// Override the prompt for one specific issue only. Empty/whitespace
   /// drops the override (revert to saved template).
-  setOverride: (issueNumber: number, value: string) => void;
-  /// Drop the override for `issueNumber`.
-  reset: (issueNumber: number) => void;
-  /// The raw template currently in effect for `issueNumber` (override or
+  setOverride: (issueId: string, value: string) => void;
+  /// Drop the override for `issueId`.
+  reset: (issueId: string) => void;
+  /// The raw template currently in effect for `issueId` (override or
   /// saved template), without placeholder interpolation. Used to seed the
   /// edit textarea.
-  templateFor: (issueNumber: number) => string;
+  templateFor: (issueId: string) => string;
   /// Returns the override (rendered with placeholders filled) for this
   /// issue, or `null` if there is none. Used by the spawn flow to decide
   /// whether to send `prompt_override` to the backend.
@@ -30,7 +30,7 @@ export interface PromptDraft {
 /// each one's draft.
 export function usePromptDraft(highlighted: Issue | null): PromptDraft {
   const [savedTemplate, setSavedTemplate] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Map<number, string>>(() => new Map());
+  const [overrides, setOverrides] = useState<Map<string, string>>(() => new Map());
 
   useEffect(() => {
     void (async () => {
@@ -43,41 +43,41 @@ export function usePromptDraft(highlighted: Issue | null): PromptDraft {
 
   const baseTemplate = savedTemplate ?? DEFAULT_SPAWN_PROMPT;
 
-  const templateFor = (issueNumber: number) => overrides.get(issueNumber) ?? baseTemplate;
+  const templateFor = (issueId: string) => overrides.get(issueId) ?? baseTemplate;
 
   const resolvedPrompt = useMemo(() => {
     if (!highlighted) return "";
-    const template = overrides.get(highlighted.number) ?? baseTemplate;
-    return renderPrompt(template, highlighted.number, highlighted.title);
+    const template = overrides.get(highlighted.id) ?? baseTemplate;
+    return renderPrompt(template, highlighted.id, highlighted.title);
   }, [highlighted, baseTemplate, overrides]);
 
-  const isDirty = !!highlighted && overrides.has(highlighted.number);
+  const isDirty = !!highlighted && overrides.has(highlighted.id);
 
-  const setOverride = (issueNumber: number, value: string) => {
+  const setOverride = (issueId: string, value: string) => {
     setOverrides((prev) => {
       const next = new Map(prev);
       if (value.trim().length === 0 || value === baseTemplate) {
-        next.delete(issueNumber);
+        next.delete(issueId);
       } else {
-        next.set(issueNumber, value);
+        next.set(issueId, value);
       }
       return next;
     });
   };
 
-  const reset = (issueNumber: number) => {
+  const reset = (issueId: string) => {
     setOverrides((prev) => {
-      if (!prev.has(issueNumber)) return prev;
+      if (!prev.has(issueId)) return prev;
       const next = new Map(prev);
-      next.delete(issueNumber);
+      next.delete(issueId);
       return next;
     });
   };
 
   const getOverrideFor = (issue: Issue): string | null => {
-    const override = overrides.get(issue.number);
+    const override = overrides.get(issue.id);
     if (override === undefined) return null;
-    return renderPrompt(override, issue.number, issue.title);
+    return renderPrompt(override, issue.id, issue.title);
   };
 
   return { resolvedPrompt, isDirty, setOverride, reset, templateFor, getOverrideFor };

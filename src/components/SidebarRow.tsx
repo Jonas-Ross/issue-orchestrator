@@ -21,9 +21,10 @@ const ACTIVITY_LABEL: Record<SessionSummary["status"], string> = {
   exited: "Exited",
 };
 
-function issueNumberFromUrl(url: string | null): string | null {
+function issueIdFromUrl(url: string | null): string | null {
   if (!url) return null;
-  const m = url.match(/\/issues\/(\d+)(?:[/?#].*)?$/);
+  // GitHub: /issues/123 ; Jira: /browse/PROJ-123 ; Linear: /issue/ENG-456
+  const m = url.match(/\/(?:issues|browse|issue)\/([A-Za-z0-9_-]+)(?:[/?#].*)?$/);
   return m ? m[1] : null;
 }
 
@@ -31,7 +32,7 @@ export function SidebarRow({ session, collapsed }: Props) {
   const isActive = activeId.value === session.id;
   const isNeeds = session.status === "needs_input";
   const isShell = !session.issueUrl && !session.branch;
-  const issueNum = issueNumberFromUrl(session.issueUrl);
+  const issueNum = issueIdFromUrl(session.issueUrl);
   const branchOrPath = session.branch ?? session.worktreePath ?? "—";
 
   const onSelect = () => {
@@ -110,7 +111,7 @@ export function SidebarRow({ session, collapsed }: Props) {
           <a
             class="sb-row-extlink"
             href={session.issueUrl}
-            title="Open issue on GitHub"
+            title="Open issue"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

@@ -5,11 +5,52 @@ use specta::Type;
 
 use crate::error::{Error, Result};
 
+/// Per-repo issue source. The `kind` discriminator is what the factory in
+/// `crate::issues::make_client` matches on. Tokens for `Jira` / `Linear`
+/// live in the macOS Keychain — never in this struct, never in
+/// `config.json`.
+#[derive(Clone, Debug, Type, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum IssueProvider {
+    Github,
+    Jira {
+        base_url: String,
+        email: String,
+        project_key: String,
+    },
+    Linear {
+        team_key: String,
+    },
+}
+
+impl Default for IssueProvider {
+    fn default() -> Self {
+        Self::Github
+    }
+}
+
+impl IssueProvider {
+    /// Stable identifier used as the Keychain account suffix and in the
+    /// `provider_secret_*` IPC commands. Matches the camelCased serde
+    /// tag so the frontend can use the same string.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Github => "github",
+            Self::Jira { .. } => "jira",
+            Self::Linear { .. } => "linear",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Type, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoEntry {
     pub name: String,
     pub path: String,
+    /// Issue source for this repo. Missing in legacy v1 configs — defaults
+    /// to `Github` so existing users see no behavior change.
+    #[serde(default)]
+    pub provider: IssueProvider,
 }
 
 #[derive(Clone, Debug, Type, Serialize, Deserialize)]
@@ -30,7 +71,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: 2,
             worktree_root: "~/dev/worktrees".into(),
             repos: Vec::new(),
             spawn_prompt_template: None,
@@ -92,6 +133,7 @@ impl Config {
         let entry = RepoEntry {
             name,
             path: canonical_str,
+            provider: IssueProvider::default(),
         };
         self.repos.push(entry.clone());
         Ok(entry)
@@ -104,6 +146,24 @@ impl Config {
             return Err(Error::Config(format!("no repo named {name}")));
         }
         Ok(())
+    }
+
+    /// Replace the issue provider for a named repo. Returns the updated
+    /// entry. Errors if no repo by that name exists. The IPC layer is
+    /// responsible for refusing this when the repo has live sessions —
+    /// see `ipc::update_repo_provider`.
+    pub fn update_repo_provider(
+        &mut self,
+        name: &str,
+        provider: IssueProvider,
+    ) -> Result<RepoEntry> {
+        let entry = self
+            .repos
+            .iter_mut()
+            .find(|r| r.name == name)
+            .ok_or_else(|| Error::Config(format!("no repo named {name}")))?;
+        entry.provider = provider;
+        Ok(entry.clone())
     }
 }
 
@@ -212,5 +272,99 @@ mod tests {
             parsed.spawn_prompt_template.as_deref(),
             Some("Custom #{issue_number}")
         );
+    }
+
+    #[test]
+    fn deserializes_legacy_config_repo_without_provider_defaults_to_github() {
+        // v1 configs predate the provider field; they must keep loading
+        // and each repo must default to GitHub so behavior is unchanged
+        // for existing users.
+        let legacy = r#"{
+            "version": 1,
+            "worktreeRoot": "~/dev/worktrees",
+            "repos": [
+                { "name": "alpha", "path": "/tmp/alpha" }
+            ],
+            "setupDone": true
+        }"#;
+        let parsed: Config = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.repos.len(), 1);
+        assert_eq!(parsed.repos[0].provider, IssueProvider::Github);
+    }
+
+    #[test]
+    fn round_trips_jira_repo_entry() {
+        let provider = IssueProvider::Jira {
+            base_url: "https://acme.atlassian.net".into(),
+            email: "ada@example.com".into(),
+            project_key: "PROJ".into(),
+        };
+        let entry = RepoEntry {
+            name: "alpha".into(),
+            path: "/tmp/alpha".into(),
+            provider: provider.clone(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        // Sanity: tag discriminator is camelCased to match the IPC contract.
+        assert!(json.contains(r#""kind":"jira""#));
+        assert!(json.contains(r#""baseUrl":"https://acme.atlassian.net""#));
+        let parsed: RepoEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.provider, provider);
+    }
+
+    #[test]
+    fn round_trips_linear_repo_entry() {
+        let provider = IssueProvider::Linear {
+            team_key: "ENG".into(),
+        };
+        let entry = RepoEntry {
+            name: "alpha".into(),
+            path: "/tmp/alpha".into(),
+            provider: provider.clone(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains(r#""kind":"linear""#));
+        assert!(json.contains(r#""teamKey":"ENG""#));
+        let parsed: RepoEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.provider, provider);
+    }
+
+    #[test]
+    fn update_repo_provider_swaps_in_place() {
+        let dir = make_git_dir();
+        let mut config = empty_config();
+        let entry = config.add_repo(dir.path()).unwrap();
+        let updated = config
+            .update_repo_provider(
+                &entry.name,
+                IssueProvider::Linear {
+                    team_key: "ENG".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            updated.provider,
+            IssueProvider::Linear {
+                team_key: "ENG".into()
+            }
+        );
+        assert_eq!(config.repos[0].provider, updated.provider);
+    }
+
+    #[test]
+    fn update_repo_provider_unknown_name_errors() {
+        let mut config = empty_config();
+        let err = config
+            .update_repo_provider("nope", IssueProvider::Github)
+            .unwrap_err();
+        assert!(matches!(err, Error::Config(_)));
+    }
+
+    #[test]
+    fn add_repo_defaults_provider_to_github() {
+        let dir = make_git_dir();
+        let mut config = empty_config();
+        let entry = config.add_repo(dir.path()).unwrap();
+        assert_eq!(entry.provider, IssueProvider::Github);
     }
 }

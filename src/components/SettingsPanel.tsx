@@ -7,6 +7,7 @@ import { repos } from "../state/repos";
 import { sessions } from "../state/sessions";
 import { Modal } from "./Modal";
 import { PromptSection } from "./SettingsPanel/PromptSection";
+import { RepoProviderSettings } from "./SettingsPanel/RepoProviderSettings";
 
 /// Thin wrapper that mounts/unmounts the inner panel around the open
 /// signal. Same pattern as IssuePicker — keeps hooks contract clean.
@@ -96,6 +97,7 @@ function SettingsPanelInner() {
 
 function ReposSection() {
   const current = settings.value;
+  const repoList = repos.value;
   return (
     <>
       <ToggleRow
@@ -104,6 +106,16 @@ function ReposSection() {
         checked={current.pastePathEnabled}
         onChange={(v) => updateSetting("pastePathEnabled", v)}
       />
+      <h4 class="settings-subhead">Issue providers</h4>
+      <p class="settings-row-desc">
+        Pick the issue source per repo. Tokens for Jira and Linear are stored in the macOS Keychain
+        — never in <code>config.json</code>.
+      </p>
+      {repoList.length === 0 ? (
+        <p class="settings-row-desc">Add a repo to configure its issue provider.</p>
+      ) : (
+        repoList.map((r) => <RepoProviderSettings key={r.name} repo={r} />)
+      )}
     </>
   );
 }

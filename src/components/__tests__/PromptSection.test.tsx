@@ -32,7 +32,7 @@ describe("<PromptSection />", () => {
     render(<PromptSection />);
     const ta = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
     expect(ta.value).toContain("issue-team");
-    expect(ta.value).toContain("{issue_number}");
+    expect(ta.value).toContain("{issue_id}");
   });
 
   it("Save persists the template via update_spawn_prompt", async () => {

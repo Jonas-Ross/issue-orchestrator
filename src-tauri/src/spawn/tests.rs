@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::config::{Config, RepoEntry};
+use crate::config::{Config, IssueProvider, RepoEntry};
 use crate::error::{Error, Result};
 use crate::registry::{RegistryCmd, SessionSummary, SpawnSpec};
 
@@ -22,11 +22,11 @@ impl IssueClient for StubIssueClient {
     async fn list(&self, _: &Path) -> Result<Vec<Issue>> {
         Ok(vec![self.issue.clone()])
     }
-    async fn view(&self, _: &Path, _number: u64) -> Result<Issue> {
+    async fn view(&self, _: &Path, _id: &str) -> Result<Issue> {
         Ok(self.issue.clone())
     }
-    async fn body(&self, _: &Path, _number: u64) -> Result<String> {
-        Ok(format!("body for #{}", self.issue.number))
+    async fn body(&self, _: &Path, _id: &str) -> Result<String> {
+        Ok(format!("body for #{}", self.issue.id))
     }
 }
 
@@ -116,11 +116,12 @@ fn fake_registry(
 fn temp_config() -> (tempfile::TempDir, Config) {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = Config {
-        version: 1,
+        version: 2,
         worktree_root: dir.path().display().to_string(),
         repos: vec![RepoEntry {
             name: "demo".into(),
             path: "/dev/null".into(),
+            provider: IssueProvider::Github,
         }],
         spawn_prompt_template: None,
         setup_done: true,
@@ -133,7 +134,7 @@ async fn new_branch_path_uses_add_new() {
     let (_tmp, config) = temp_config();
     let issue_client = Arc::new(StubIssueClient {
         issue: Issue {
-            number: 7,
+            id: "7".into(),
             title: "Add tab strip".into(),
             labels: vec!["feat".into()],
             url: "https://github.com/demo/demo/issues/7".into(),
@@ -146,7 +147,7 @@ async fn new_branch_path_uses_add_new() {
 
     let summary = spawn_issue_session(
         &repo,
-        7,
+        "7".into(),
         &config,
         None,
         issue_client,
@@ -191,7 +192,7 @@ async fn existing_branch_path_uses_add_existing() {
     let (_tmp, config) = temp_config();
     let issue_client = Arc::new(StubIssueClient {
         issue: Issue {
-            number: 12,
+            id: "12".into(),
             title: "Refactor registry".into(),
             labels: vec![],
             url: "https://github.com/demo/demo/issues/12".into(),
@@ -207,7 +208,7 @@ async fn existing_branch_path_uses_add_existing() {
 
     spawn_issue_session(
         &repo,
-        12,
+        "12".into(),
         &config,
         None,
         issue_client,
@@ -237,7 +238,7 @@ async fn existing_worktree_skips_git_add() {
 
     let issue_client = Arc::new(StubIssueClient {
         issue: Issue {
-            number: 99,
+            id: "99".into(),
             title: "Reusable".into(),
             labels: vec![],
             url: "https://github.com/demo/demo/issues/99".into(),
@@ -253,7 +254,7 @@ async fn existing_worktree_skips_git_add() {
 
     spawn_issue_session(
         &repo,
-        99,
+        "99".into(),
         &config,
         None,
         issue_client,
@@ -277,7 +278,7 @@ async fn existing_worktree_skips_git_add() {
 
 #[test]
 fn render_prompt_default_template() {
-    let rendered = render_prompt(DEFAULT_SPAWN_PROMPT, 7, "Add tab strip");
+    let rendered = render_prompt(DEFAULT_SPAWN_PROMPT, "7", "Add tab strip");
     assert_eq!(
         rendered,
         "Use the issue-team skill to implement issue #7 (Add tab strip)."
@@ -287,8 +288,8 @@ fn render_prompt_default_template() {
 #[test]
 fn render_prompt_custom_template_with_both_placeholders() {
     let rendered = render_prompt(
-        "Implement {issue_title} (#{issue_number}) using feature-dev.",
-        42,
+        "Implement {issue_title} (#{issue_id}) using feature-dev.",
+        "42",
         "Auth refactor",
     );
     assert_eq!(
@@ -298,19 +299,44 @@ fn render_prompt_custom_template_with_both_placeholders() {
 }
 
 #[test]
+fn render_prompt_jira_key_id_substitutes_verbatim() {
+    let rendered = render_prompt(
+        "Implement {issue_title} (#{issue_id}) using feature-dev.",
+        "PROJ-42",
+        "Auth refactor",
+    );
+    assert_eq!(
+        rendered,
+        "Implement Auth refactor (#PROJ-42) using feature-dev."
+    );
+}
+
+#[test]
+fn render_prompt_legacy_issue_number_token_still_works() {
+    // Saved templates from before the multi-provider switch use
+    // `{issue_number}` — they must keep rendering correctly.
+    let rendered = render_prompt(
+        "Old template ({issue_number}, {issue_title})",
+        "PROJ-7",
+        "x",
+    );
+    assert_eq!(rendered, "Old template (PROJ-7, x)");
+}
+
+#[test]
 fn render_prompt_template_without_placeholders_passes_through() {
-    let rendered = render_prompt("just do something", 1, "ignored");
+    let rendered = render_prompt("just do something", "1", "ignored");
     assert_eq!(rendered, "just do something");
 }
 
 #[tokio::test]
 async fn prompt_override_takes_precedence_over_config_template() {
     let (_tmp, mut config) = temp_config();
-    config.spawn_prompt_template = Some("config template #{issue_number}".into());
+    config.spawn_prompt_template = Some("config template #{issue_id}".into());
 
     let issue_client = Arc::new(StubIssueClient {
         issue: Issue {
-            number: 5,
+            id: "5".into(),
             title: "x".into(),
             labels: vec![],
             url: "https://github.com/demo/demo/issues/5".into(),
@@ -323,9 +349,9 @@ async fn prompt_override_takes_precedence_over_config_template() {
 
     spawn_issue_session(
         &repo,
-        5,
+        "5".into(),
         &config,
-        Some("override #{issue_number}".into()),
+        Some("override #{issue_id}".into()),
         issue_client,
         git,
         registry,
@@ -346,11 +372,11 @@ async fn prompt_override_takes_precedence_over_config_template() {
 async fn config_template_used_when_no_override() {
     let (_tmp, mut config) = temp_config();
     config.spawn_prompt_template =
-        Some("Saved: {issue_title} (#{issue_number})".into());
+        Some("Saved: {issue_title} (#{issue_id})".into());
 
     let issue_client = Arc::new(StubIssueClient {
         issue: Issue {
-            number: 9,
+            id: "9".into(),
             title: "Bug fix".into(),
             labels: vec![],
             url: "https://github.com/demo/demo/issues/9".into(),
@@ -363,7 +389,7 @@ async fn config_template_used_when_no_override() {
 
     spawn_issue_session(
         &repo,
-        9,
+        "9".into(),
         &config,
         None,
         issue_client,
@@ -388,7 +414,7 @@ async fn default_template_used_when_neither_override_nor_config() {
 
     let issue_client = Arc::new(StubIssueClient {
         issue: Issue {
-            number: 3,
+            id: "3".into(),
             title: "Hello".into(),
             labels: vec![],
             url: "https://github.com/demo/demo/issues/3".into(),
@@ -401,7 +427,7 @@ async fn default_template_used_when_neither_override_nor_config() {
 
     spawn_issue_session(
         &repo,
-        3,
+        "3".into(),
         &config,
         None,
         issue_client,
@@ -419,6 +445,57 @@ async fn default_template_used_when_neither_override_nor_config() {
             prompt,
             "Use the issue-team skill to implement issue #3 (Hello)."
         ),
+        _ => panic!("expected Claude spec"),
+    }
+}
+
+#[tokio::test]
+async fn jira_key_produces_sanitized_branch_and_worktree() {
+    let (_tmp, config) = temp_config();
+    let issue_client = Arc::new(StubIssueClient {
+        issue: Issue {
+            id: "PROJ-456".into(),
+            title: "From Jira".into(),
+            labels: vec![],
+            url: "https://acme.atlassian.net/browse/PROJ-456".into(),
+        },
+    });
+    let git = Arc::new(RecordingGit::default());
+    let captured: Arc<Mutex<Option<SpawnSpec>>> = Arc::new(Mutex::new(None));
+    let registry = fake_registry(Arc::clone(&captured));
+    let repo = config.repos[0].clone();
+
+    spawn_issue_session(
+        &repo,
+        "PROJ-456".into(),
+        &config,
+        None,
+        issue_client,
+        git.clone(),
+        registry,
+        80,
+        24,
+    )
+    .await
+    .expect("spawn ok");
+
+    let calls = git.calls.lock().unwrap().clone();
+    assert_eq!(calls.len(), 1);
+    assert!(
+        calls[0].starts_with("add_new branch=issue-proj-456"),
+        "expected sanitized branch, got: {}",
+        calls[0]
+    );
+
+    let spec = captured.lock().unwrap().take().expect("Spawn captured");
+    match spec {
+        SpawnSpec::Claude { cwd, branch, prompt, .. } => {
+            assert!(cwd.ends_with("demo-issue-proj-456"));
+            assert_eq!(branch.as_deref(), Some("issue-proj-456"));
+            // The rendered prompt preserves the original (uppercase) id —
+            // sanitization only affects branch/worktree paths.
+            assert!(prompt.contains("#PROJ-456"));
+        }
         _ => panic!("expected Claude spec"),
     }
 }
