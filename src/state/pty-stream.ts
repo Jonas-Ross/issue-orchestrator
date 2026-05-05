@@ -6,37 +6,44 @@ import { events } from "../lib/bindings";
 /// registered its xterm instance. We buffer chunks per sessionId until a
 /// terminal attaches, then drain the buffer into it. After detach (tab
 /// closed or unmounted), further chunks are silently dropped.
-const terminals = new Map<string, Terminal>();
-const pending = new Map<string, string[]>();
+export function createPtyStream() {
+  const terminals = new Map<string, Terminal>();
+  const pending = new Map<string, string[]>();
+  let started = false;
 
-let started = false;
+  function startPtyStream(): void {
+    if (started) return;
+    started = true;
+    void events.ptyData.listen((e) => {
+      const { sessionId, chunk } = e.payload;
+      const term = terminals.get(sessionId);
+      if (term) {
+        term.write(chunk);
+        return;
+      }
+      const buf = pending.get(sessionId) ?? [];
+      buf.push(chunk);
+      pending.set(sessionId, buf);
+    });
+  }
 
-export function startPtyStream(): void {
-  if (started) return;
-  started = true;
-  void events.ptyData.listen((e) => {
-    const { sessionId, chunk } = e.payload;
-    const term = terminals.get(sessionId);
-    if (term) {
-      term.write(chunk);
-      return;
+  function attachTerminal(sessionId: string, term: Terminal): void {
+    const buf = pending.get(sessionId);
+    if (buf) {
+      for (const chunk of buf) term.write(chunk);
+      pending.delete(sessionId);
     }
-    const buf = pending.get(sessionId) ?? [];
-    buf.push(chunk);
-    pending.set(sessionId, buf);
-  });
-}
+    terminals.set(sessionId, term);
+  }
 
-export function attachTerminal(sessionId: string, term: Terminal): void {
-  const buf = pending.get(sessionId);
-  if (buf) {
-    for (const chunk of buf) term.write(chunk);
+  function detachTerminal(sessionId: string): void {
+    terminals.delete(sessionId);
     pending.delete(sessionId);
   }
-  terminals.set(sessionId, term);
+
+  return { startPtyStream, attachTerminal, detachTerminal };
 }
 
-export function detachTerminal(sessionId: string): void {
-  terminals.delete(sessionId);
-  pending.delete(sessionId);
-}
+export const ptyStreamStore = createPtyStream();
+export const { startPtyStream, attachTerminal, detachTerminal } =
+  ptyStreamStore;

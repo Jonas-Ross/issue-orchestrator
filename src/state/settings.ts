@@ -1,6 +1,6 @@
 import { signal, effect } from "@preact/signals";
 
-const STORAGE_KEY = "io.settings.v1";
+export const STORAGE_KEY = "io.settings.v1";
 
 export interface Settings {
   /// Show the "Paste path" affordance in the AddRepoButton. When false,
@@ -13,9 +13,9 @@ const DEFAULT_SETTINGS: Settings = {
   pastePathEnabled: false,
 };
 
-function loadSettings(): Settings {
+function loadSettings(storage: Storage): Settings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
     return { ...DEFAULT_SETTINGS, ...parsed };
@@ -24,26 +24,46 @@ function loadSettings(): Settings {
   }
 }
 
-export const settings = signal<Settings>(loadSettings());
+export function createSettingsStore(storage: Storage = localStorage) {
+  const settings = signal<Settings>(loadSettings(storage));
 
-effect(() => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.value));
-  } catch {
-    // best effort; storage may be disabled
+  effect(() => {
+    try {
+      storage.setItem(STORAGE_KEY, JSON.stringify(settings.value));
+    } catch {
+      // best effort; storage may be disabled
+    }
+  });
+
+  function updateSetting<K extends keyof Settings>(
+    key: K,
+    value: Settings[K],
+  ) {
+    settings.value = { ...settings.value, [key]: value };
   }
-});
 
-export function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
-  settings.value = { ...settings.value, [key]: value };
+  const settingsPanelOpen = signal(false);
+  const openSettings = () => {
+    settingsPanelOpen.value = true;
+  };
+  const closeSettings = () => {
+    settingsPanelOpen.value = false;
+  };
+
+  return {
+    settings,
+    settingsPanelOpen,
+    updateSetting,
+    openSettings,
+    closeSettings,
+  };
 }
 
-export const settingsPanelOpen = signal(false);
-
-export function openSettings() {
-  settingsPanelOpen.value = true;
-}
-
-export function closeSettings() {
-  settingsPanelOpen.value = false;
-}
+export const settingsStore = createSettingsStore();
+export const {
+  settings,
+  settingsPanelOpen,
+  updateSetting,
+  openSettings,
+  closeSettings,
+} = settingsStore;
