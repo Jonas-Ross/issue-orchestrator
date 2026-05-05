@@ -13,7 +13,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24+ — the test script's NODE_OPTIONS=--no-webstorage flag
+          # exists from Node 22.4 but isn't allowed inside NODE_OPTIONS
+          # until later in the 22 line; using current LTS sidesteps this.
+          node-version: 24
           cache: npm
 
       # Tauri's Linux build needs GTK + webkit system libs even just to
