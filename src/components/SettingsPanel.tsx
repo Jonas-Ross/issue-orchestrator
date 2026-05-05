@@ -5,6 +5,7 @@ import { useFocusRestore, useFocusTrap } from "../lib/use-focus-trap";
 import { closeSettings, settings, settingsPanelOpen, updateSetting } from "../state/settings";
 import { repos } from "../state/repos";
 import { sessions } from "../state/sessions";
+import { Modal } from "./Modal";
 
 /// Thin wrapper that mounts/unmounts the inner panel around the open
 /// signal. Same pattern as IssuePicker — keeps hooks contract clean.
@@ -47,37 +48,40 @@ function SettingsPanelInner() {
   useFocusTrap(modalRef);
 
   return (
-    <div class="modal-overlay" onClick={() => closeSettings()}>
-      <div class="settings-shell" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-        <header class="settings-header">
-          <h2>Settings</h2>
-          <button type="button" class="close" onClick={() => closeSettings()} title="Close (Esc)">
-            ×
-          </button>
-        </header>
+    <Modal
+      onClose={() => closeSettings()}
+      dialogClass="settings-shell"
+      dialogRef={modalRef}
+      tabIndex={-1}
+    >
+      <header class="settings-header">
+        <h2>Settings</h2>
+        <button type="button" class="close" onClick={() => closeSettings()} title="Close (Esc)">
+          ×
+        </button>
+      </header>
 
-        <div class="settings-body">
-          <nav class="settings-nav">
-            {CATEGORIES.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                class={`settings-nav-item${c.id === activeId ? " active" : ""}`}
-                onClick={() => setActiveId(c.id)}
-              >
-                <span class="settings-nav-glyph">{c.glyph}</span>
-                <span class="settings-nav-label">{c.label}</span>
-              </button>
-            ))}
-          </nav>
+      <div class="settings-body">
+        <nav class="settings-nav">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              class={`settings-nav-item${c.id === activeId ? " active" : ""}`}
+              onClick={() => setActiveId(c.id)}
+            >
+              <span class="settings-nav-glyph">{c.glyph}</span>
+              <span class="settings-nav-label">{c.label}</span>
+            </button>
+          ))}
+        </nav>
 
-          <section class="settings-pane">
-            <h3 class="settings-pane-title">{active.label}</h3>
-            <div class="settings-pane-body">{active.Render()}</div>
-          </section>
-        </div>
+        <section class="settings-pane">
+          <h3 class="settings-pane-title">{active.label}</h3>
+          <div class="settings-pane-body">{active.Render()}</div>
+        </section>
       </div>
-    </div>
+    </Modal>
   );
 }
 

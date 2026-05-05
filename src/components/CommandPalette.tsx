@@ -3,6 +3,7 @@ import { commands } from "../lib/bindings";
 import { activeId, sessions } from "../state/sessions";
 import { openPicker } from "../state/picker";
 import { closePalette, paletteOpen } from "../state/palette";
+import { Modal } from "./Modal";
 
 interface PaletteAction {
   id: string;
@@ -96,37 +97,33 @@ export function CommandPalette() {
   };
 
   return (
-    <div class="modal-overlay" onClick={() => closePalette()}>
-      <div class="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
-        <input
-          ref={inputRef}
-          class="palette-input"
-          placeholder="Switch session, run command, open issue…"
-          value={query}
-          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-          onKeyDown={onKeyDown}
-        />
-        <ul class="palette-list">
-          {filtered.length === 0 && (
-            <li class="hint" style={{ background: "transparent", color: "#888" }}>
-              No matches.
-            </li>
-          )}
-          {filtered.map((a, i) => (
-            <li
-              key={a.id}
-              class={i === activeIdx ? "active" : undefined}
-              onMouseEnter={() => setActiveIdx(i)}
-              onClick={() => a.run()}
-            >
-              <span>{a.label}</span>
-              {a.hint && (
-                <span style={{ float: "right", opacity: 0.6, fontSize: 11 }}>{a.hint}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+    <Modal onClose={() => closePalette()} style={{ width: 480 }}>
+      <input
+        ref={inputRef}
+        class="palette-input"
+        placeholder="Switch session, run command, open issue…"
+        value={query}
+        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+        onKeyDown={onKeyDown}
+      />
+      <ul class="palette-list">
+        {filtered.length === 0 && (
+          <li class="hint" style={{ background: "transparent", color: "#888" }}>
+            No matches.
+          </li>
+        )}
+        {filtered.map((a, i) => (
+          <li
+            key={a.id}
+            class={i === activeIdx ? "active" : undefined}
+            onMouseEnter={() => setActiveIdx(i)}
+            onClick={() => a.run()}
+          >
+            <span>{a.label}</span>
+            {a.hint && <span style={{ float: "right", opacity: 0.6, fontSize: 11 }}>{a.hint}</span>}
+          </li>
+        ))}
+      </ul>
+    </Modal>
   );
 }

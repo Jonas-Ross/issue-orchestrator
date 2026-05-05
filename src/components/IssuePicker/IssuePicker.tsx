@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from "preact/hooks";
 import { commands } from "../../lib/bindings";
+import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "../../lib/constants";
 import { activeId } from "../../state/sessions";
 import { closePicker, pickerOpen } from "../../state/picker";
+import { Modal } from "../Modal";
 import { IssueList } from "./IssueList";
 import { IssuePickerHeader } from "./IssuePickerHeader";
 import { IssuePickerToolbar } from "./IssuePickerToolbar";
@@ -63,7 +65,12 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
     async (issue: Issue) => {
       if (!selectedRepo || spawning !== null) return;
       setSpawning(issue.number);
-      const result = await commands.spawnIssueSession(selectedRepo, issue.number, 80, 24);
+      const result = await commands.spawnIssueSession(
+        selectedRepo,
+        issue.number,
+        DEFAULT_PTY_COLS,
+        DEFAULT_PTY_ROWS,
+      );
       setSpawning(null);
       if (result.status === "error") {
         setIssues({ tag: "error", message: result.error });
@@ -95,55 +102,53 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
   const showRepoSelect = !prefilledRepo && repos.length > 1;
 
   return (
-    <div class="modal-overlay" onClick={() => closePicker()}>
-      <div class="modal" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-        <IssuePickerHeader
-          canDecide={!!selectedRepo && !recommending && allIssues.length > 0}
-          recommending={recommending}
-          onDecide={() => void onDecide()}
-          onClose={() => closePicker()}
+    <Modal onClose={() => closePicker()} dialogRef={modalRef} tabIndex={-1}>
+      <IssuePickerHeader
+        canDecide={!!selectedRepo && !recommending && allIssues.length > 0}
+        recommending={recommending}
+        onDecide={() => void onDecide()}
+        onClose={() => closePicker()}
+      />
+      <RepoStatusBanner
+        prefilledRepo={prefilledRepo}
+        reposError={reposError}
+        repoCount={repos.length}
+      />
+      {showRepoSelect && (
+        <RepoSelect
+          repos={repos}
+          selectedRepo={selectedRepo}
+          onChange={setSelectedRepo}
+          refAttach={selectRefAttach}
         />
-        <RepoStatusBanner
-          prefilledRepo={prefilledRepo}
-          reposError={reposError}
-          repoCount={repos.length}
+      )}
+      {selectedRepo && hasIssues && (
+        <IssuePickerToolbar
+          search={search}
+          setSearch={setSearch}
+          allLabels={allLabels}
+          activeLabels={activeLabels}
+          toggleLabel={toggleLabel}
+          recommendation={recommendation}
+          recoError={recoError}
+          searchRefAttach={searchRefAttach}
         />
-        {showRepoSelect && (
-          <RepoSelect
-            repos={repos}
-            selectedRepo={selectedRepo}
-            onChange={setSelectedRepo}
-            refAttach={selectRefAttach}
-          />
-        )}
-        {selectedRepo && hasIssues && (
-          <IssuePickerToolbar
-            search={search}
-            setSearch={setSearch}
-            allLabels={allLabels}
-            activeLabels={activeLabels}
-            toggleLabel={toggleLabel}
-            recommendation={recommendation}
-            recoError={recoError}
-            searchRefAttach={searchRefAttach}
-          />
-        )}
-        <IssuesStatusBanner selectedRepo={selectedRepo} issues={issues} />
-        {selectedRepo && hasIssues && (
-          <IssueList
-            listRef={listRef}
-            issues={filteredIssues}
-            highlightedIndex={highlightedIndex}
-            expanded={expanded}
-            recommendation={recommendation}
-            spawning={spawning}
-            bodies={bodies}
-            onSpawn={(i) => void onSpawn(i)}
-            onToggleExpand={(i) => void toggleExpand(i)}
-            onHighlight={setHighlightedIndex}
-          />
-        )}
-      </div>
-    </div>
+      )}
+      <IssuesStatusBanner selectedRepo={selectedRepo} issues={issues} />
+      {selectedRepo && hasIssues && (
+        <IssueList
+          listRef={listRef}
+          issues={filteredIssues}
+          highlightedIndex={highlightedIndex}
+          expanded={expanded}
+          recommendation={recommendation}
+          spawning={spawning}
+          bodies={bodies}
+          onSpawn={(i) => void onSpawn(i)}
+          onToggleExpand={(i) => void toggleExpand(i)}
+          onHighlight={setHighlightedIndex}
+        />
+      )}
+    </Modal>
   );
 }

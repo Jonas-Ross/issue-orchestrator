@@ -1,13 +1,6 @@
-import { commands } from "../lib/bindings";
+import { spawnBash } from "../lib/spawn-bash";
 import { openPicker } from "../state/picker";
 import { Kbd } from "./Kbd";
-
-async function spawnBash() {
-  const result = await commands.ptySpawn(80, 24);
-  if (result.status === "error") {
-    console.error("ptySpawn failed:", result.error);
-  }
-}
 
 export function EmptyState() {
   return (
