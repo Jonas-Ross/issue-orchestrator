@@ -34,8 +34,7 @@ describe("sessions state", () => {
 
   describe("removeSession", () => {
     it("drops the session and rolls activeId to next survivor", () => {
-      const { sessions, activeId, addSession, removeSession } =
-        createSessionsState();
+      const { sessions, activeId, addSession, removeSession } = createSessionsState();
       addSession(makeSession({ id: "s1" }));
       addSession(makeSession({ id: "s2" }));
       removeSession("s1");

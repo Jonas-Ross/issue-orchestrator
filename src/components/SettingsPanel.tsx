@@ -2,12 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { commands } from "../lib/bindings";
 import type { Config } from "../lib/bindings";
 import { useFocusRestore, useFocusTrap } from "../lib/use-focus-trap";
-import {
-  closeSettings,
-  settings,
-  settingsPanelOpen,
-  updateSetting,
-} from "../state/settings";
+import { closeSettings, settings, settingsPanelOpen, updateSetting } from "../state/settings";
 import { repos } from "../state/repos";
 import { sessions } from "../state/sessions";
 
@@ -53,20 +48,10 @@ function SettingsPanelInner() {
 
   return (
     <div class="modal-overlay" onClick={() => closeSettings()}>
-      <div
-        class="settings-shell"
-        ref={modalRef}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div class="settings-shell" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <header class="settings-header">
           <h2>Settings</h2>
-          <button
-            type="button"
-            class="close"
-            onClick={() => closeSettings()}
-            title="Close (Esc)"
-          >
+          <button type="button" class="close" onClick={() => closeSettings()} title="Close (Esc)">
             ×
           </button>
         </header>
@@ -127,11 +112,7 @@ function AboutSection() {
   return (
     <dl class="settings-info">
       <InfoRow label="App version" value={APP_VERSION} mono />
-      <InfoRow
-        label="Worktree root"
-        value={config?.worktreeRoot ?? "Loading…"}
-        mono
-      />
+      <InfoRow label="Worktree root" value={config?.worktreeRoot ?? "Loading…"} mono />
       <InfoRow label="Configured repos" value={String(repoCount)} />
       <InfoRow label="Active sessions" value={String(sessionCount)} />
     </dl>
@@ -156,9 +137,7 @@ function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
     <label class="settings-row">
       <div class="settings-row-text">
         <span class="settings-row-label">{label}</span>
-        {description && (
-          <span class="settings-row-desc">{description}</span>
-        )}
+        {description && <span class="settings-row-desc">{description}</span>}
       </div>
       <button
         type="button"

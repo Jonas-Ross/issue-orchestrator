@@ -103,11 +103,7 @@ export function Sidebar() {
         ) : (
           <>
             {repoList.map((r) => (
-              <RepoDrawer
-                key={r.name}
-                repo={r}
-                sessions={grouped.get(r.name) ?? []}
-              />
+              <RepoDrawer key={r.name} repo={r} sessions={grouped.get(r.name) ?? []} />
             ))}
 
             {shellSessions.length > 0 && (

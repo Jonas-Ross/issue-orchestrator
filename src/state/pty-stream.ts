@@ -45,5 +45,4 @@ export function createPtyStream() {
 }
 
 export const ptyStreamStore = createPtyStream();
-export const { startPtyStream, attachTerminal, detachTerminal } =
-  ptyStreamStore;
+export const { startPtyStream, attachTerminal, detachTerminal } = ptyStreamStore;

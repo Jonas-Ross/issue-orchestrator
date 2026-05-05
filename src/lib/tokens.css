@@ -24,7 +24,7 @@
   --status-idle: #5d8eff;
   --status-exited: #e5534b;
   --status-spawning: #8b8e93;
-  --status-needs-bg: rgba(134, 239, 172, 0.10);
+  --status-needs-bg: rgba(134, 239, 172, 0.1);
   --status-needs-bg-strong: rgba(134, 239, 172, 0.13);
   --status-needs-rail: rgba(134, 239, 172, 0.45);
   --status-needs-badge-fg: #0a1a10;
@@ -66,7 +66,7 @@
 
   /* motion */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-in-out: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-micro: 120ms;
   --dur-modal: 140ms;
   --dur-reveal: 180ms;

@@ -19,10 +19,7 @@ describe("settings store", () => {
   });
 
   it("ignores unknown keys but keeps known ones", () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ pastePathEnabled: true, futureKey: "x" }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ pastePathEnabled: true, futureKey: "x" }));
     const { settings } = createSettingsStore();
     expect(settings.value.pastePathEnabled).toBe(true);
     expect((settings.value as unknown as Record<string, unknown>).futureKey).toBe("x");
@@ -36,8 +33,7 @@ describe("settings store", () => {
   });
 
   it("openSettings/closeSettings flip the panel signal", () => {
-    const { settingsPanelOpen, openSettings, closeSettings } =
-      createSettingsStore();
+    const { settingsPanelOpen, openSettings, closeSettings } = createSettingsStore();
     expect(settingsPanelOpen.value).toBe(false);
     openSettings();
     expect(settingsPanelOpen.value).toBe(true);

@@ -4,9 +4,7 @@
 
 import type { SessionSummary } from "../lib/bindings";
 
-export function makeSession(
-  overrides: Partial<SessionSummary> = {},
-): SessionSummary {
+export function makeSession(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
     id: "s1",
     title: "Session 1",

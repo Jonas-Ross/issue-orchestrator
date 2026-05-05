@@ -15,9 +15,9 @@ export function useFocusTrap(rootRef: RefObject<HTMLElement>) {
       if (e.key !== "Tab") return;
       const root = rootRef.current;
       if (!root) return;
-      const focusables = Array.from(
-        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      ).filter((el) => el.offsetParent !== null || el === root);
+      const focusables = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (el) => el.offsetParent !== null || el === root,
+      );
       if (focusables.length === 0) {
         e.preventDefault();
         root.focus();

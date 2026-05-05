@@ -3,12 +3,7 @@ import { mockCommands } from "../../test/tauri-mock";
 import { CommandPalette } from "../CommandPalette";
 import { paletteOpen, closePalette } from "../../state/palette";
 import { pickerOpen } from "../../state/picker";
-import {
-  sessions,
-  activeId,
-  addSession,
-  removeSession,
-} from "../../state/sessions";
+import { sessions, activeId, addSession, removeSession } from "../../state/sessions";
 import { makeSession } from "../../test/factories";
 
 beforeEach(() => {
@@ -29,9 +24,7 @@ describe("<CommandPalette />", () => {
     mockCommands({});
     paletteOpen.value = true;
     render(<CommandPalette />);
-    expect(
-      screen.getByPlaceholderText(/Switch session, run command/i),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Switch session, run command/i)).toBeInTheDocument();
   });
 
   it("always offers the 'New issue session' action", () => {
@@ -77,9 +70,7 @@ describe("<CommandPalette />", () => {
     addSession(makeSession({ id: "s2", title: "beta" }));
     paletteOpen.value = true;
     render(<CommandPalette />);
-    const input = screen.getByPlaceholderText(
-      /Switch session/i,
-    ) as HTMLInputElement;
+    const input = screen.getByPlaceholderText(/Switch session/i) as HTMLInputElement;
     fireEvent.input(input, { target: { value: "beta" } });
     expect(screen.queryByText(/Switch to: alpha/)).toBeNull();
     expect(screen.getByText(/Switch to: beta/)).toBeInTheDocument();

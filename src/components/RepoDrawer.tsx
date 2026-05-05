@@ -56,11 +56,7 @@ export function RepoDrawer({ repo, sessions }: Props) {
         <span class="repo-drawer-caret">{expanded ? "▾" : "▸"}</span>
         <span class="repo-drawer-name">{repo.name}</span>
         <span class="repo-drawer-count">
-          {needsCount > 0 ? (
-            <span class="repo-drawer-needs">{needsCount}</span>
-          ) : (
-            sessions.length
-          )}
+          {needsCount > 0 ? <span class="repo-drawer-needs">{needsCount}</span> : sessions.length}
         </span>
         <button
           type="button"
@@ -80,9 +76,7 @@ export function RepoDrawer({ repo, sessions }: Props) {
           {sessions.length === 0 ? (
             <div class="repo-drawer-empty">No sessions yet</div>
           ) : (
-            sessions.map((s) => (
-              <SidebarRow key={s.id} session={s} collapsed={false} />
-            ))
+            sessions.map((s) => <SidebarRow key={s.id} session={s} collapsed={false} />)
           )}
         </div>
       )}

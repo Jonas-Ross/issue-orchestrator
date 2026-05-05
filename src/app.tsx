@@ -26,18 +26,10 @@ export function App() {
     const unlistens: Array<() => void> = [];
 
     void (async () => {
+      unlistens.push(await events.sessionAdded.listen((e) => addSession(e.payload)));
+      unlistens.push(await events.sessionRemoved.listen((e) => removeSession(e.payload.sessionId)));
       unlistens.push(
-        await events.sessionAdded.listen((e) => addSession(e.payload)),
-      );
-      unlistens.push(
-        await events.sessionRemoved.listen((e) =>
-          removeSession(e.payload.sessionId),
-        ),
-      );
-      unlistens.push(
-        await events.statusChange.listen((e) =>
-          setStatus(e.payload.sessionId, e.payload.status),
-        ),
+        await events.statusChange.listen((e) => setStatus(e.payload.sessionId, e.payload.status)),
       );
 
       const sessionList = await commands.listSessions();

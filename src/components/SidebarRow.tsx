@@ -79,11 +79,7 @@ export function SidebarRow({ session, collapsed }: Props) {
   if (collapsed) {
     return (
       <div
-        class={
-          "sb-row sb-row-collapsed" +
-          (isActive ? " active" : "") +
-          (isNeeds ? " needs" : "")
-        }
+        class={"sb-row sb-row-collapsed" + (isActive ? " active" : "") + (isNeeds ? " needs" : "")}
         onClick={onSelect}
         onContextMenu={onContextMenu}
         title={`#${issueNum ?? "—"} ${session.title}`}
@@ -107,7 +103,9 @@ export function SidebarRow({ session, collapsed }: Props) {
       <div class="sb-row-line1">
         <StatusDot status={session.status} size={7} pulse={isNeeds} />
         {issueNum && <span class="sb-row-num">#{issueNum}</span>}
-        <span class="sb-row-title" title={session.title}>{session.title}</span>
+        <span class="sb-row-title" title={session.title}>
+          {session.title}
+        </span>
         {session.issueUrl && (
           <a
             class="sb-row-extlink"

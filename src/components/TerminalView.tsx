@@ -66,10 +66,6 @@ export function TerminalView({ sessionId, active }: Props) {
   }, [active, sessionId]);
 
   return (
-    <div
-      ref={hostRef}
-      className="terminal-host"
-      style={{ display: active ? "block" : "none" }}
-    />
+    <div ref={hostRef} className="terminal-host" style={{ display: active ? "block" : "none" }} />
   );
 }

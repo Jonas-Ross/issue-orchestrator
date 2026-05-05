@@ -21,9 +21,7 @@ export function createReposStore(storage: Storage = localStorage) {
   /// Per-repo drawer expansion state, mirrored to storage so it survives
   /// reloads. Keyed by repo name. Missing entries default to expanded
   /// (true) on first render.
-  const drawerExpanded = signal<Record<string, boolean>>(
-    loadDrawerState(storage),
-  );
+  const drawerExpanded = signal<Record<string, boolean>>(loadDrawerState(storage));
 
   function persistDrawerState() {
     try {
