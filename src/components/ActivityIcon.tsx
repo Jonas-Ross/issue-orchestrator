@@ -81,21 +81,26 @@ const ICONS: Record<Kind, preact.JSX.Element> = {
   ),
 };
 
+function activityKind(status: Status, isShell: boolean): Kind {
+  if (isShell) return "shell";
+  switch (status) {
+    case "needs_input":
+      return "wait";
+    case "running":
+      return "edit";
+    case "idle":
+      return "idle";
+    case "exited":
+      return "exit";
+    case "spawning":
+      return "spawn";
+  }
+}
+
 export function ActivityIcon({ status, isShell = false }: { status: Status; isShell?: boolean }) {
-  const kind: Kind = isShell
-    ? "shell"
-    : status === "needs_input"
-      ? "wait"
-      : status === "running"
-        ? "edit"
-        : status === "idle"
-          ? "idle"
-          : status === "exited"
-            ? "exit"
-            : "spawn";
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" class="activity-icon">
-      {ICONS[kind]}
+      {ICONS[activityKind(status, isShell)]}
     </svg>
   );
 }

@@ -22,6 +22,7 @@
     "max-nested-callbacks": ["error", 4],
     "no-console": ["error", { "allow": ["warn", "error"] }],
     "no-debugger": "error",
+    "no-nested-ternary": "error",
     "import/no-cycle": "error",
     "import/no-duplicates": "error",
     "import/no-unassigned-import": "off",

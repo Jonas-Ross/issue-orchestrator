@@ -83,7 +83,8 @@ function CommandRow({ command }: { command: string }) {
     setTimeout(() => setStatus("idle"), 1500);
   };
 
-  const label = status === "copied" ? "Copied" : status === "failed" ? "Select manually" : "Copy";
+  const LABELS = { idle: "Copy", copied: "Copied", failed: "Select manually" } as const;
+  const label = LABELS[status];
 
   return (
     <div class="snippet-row">
