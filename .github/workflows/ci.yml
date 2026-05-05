@@ -22,7 +22,13 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - run: npm ci
+      # `npm install` (not `npm ci`) because vitest 4 nests vite 8 with an
+      # optional peer dep on esbuild — the lockfile generated on macOS
+      # records platform-specific esbuild binaries in a way that npm 11's
+      # strict ci check refuses on linux/x64. `npm install` honors the
+      # lockfile's pinned versions but is lenient about the platform
+      # filtering. CI determinism is preserved by the pinned versions.
+      - run: npm install --no-audit --no-fund
 
       # bindings.ts is gitignored and generated from the Rust IPC surface;
       # regenerate it before lint / typecheck / test.
