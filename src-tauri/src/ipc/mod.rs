@@ -283,6 +283,46 @@ pub async fn decide_next_issue(
         .map_err(Into::into)
 }
 
+/// Persist (or clear, when `template = None`) the user-configured spawn
+/// prompt template. Atomic-saves the config file via the existing
+/// `Config::save` path.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_spawn_prompt(
+    state: State<'_, AppState>,
+    template: Option<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.spawn_prompt_template = template.filter(|t| !t.trim().is_empty());
+    config.save(&state.config_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Ask `claude -p` (running in the chosen repo's cwd) to rewrite the
+/// supplied template using whatever skills/MCPs/plugins are visible to a
+/// session there. Returns the rewritten template; the caller is
+/// responsible for calling `update_spawn_prompt` to actually persist it.
+#[tauri::command]
+#[specta::specta]
+pub async fn optimize_spawn_prompt(
+    state: State<'_, AppState>,
+    repo_name: String,
+    current_prompt: String,
+) -> Result<String, String> {
+    let repo = {
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        config
+            .repos
+            .iter()
+            .find(|r| r.name == repo_name)
+            .cloned()
+            .ok_or_else(|| format!("unknown repo: {repo_name}"))?
+    };
+    spawn::optimize_spawn_prompt(&repo, &current_prompt)
+        .await
+        .map_err(Into::into)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn spawn_issue_session(
@@ -291,6 +331,7 @@ pub async fn spawn_issue_session(
     issue_number: u64,
     cols: u16,
     rows: u16,
+    prompt_override: Option<String>,
 ) -> Result<SessionSummary, String> {
     let (repo, config) = {
         let config = state.config.lock().map_err(|e| e.to_string())?;
@@ -307,6 +348,7 @@ pub async fn spawn_issue_session(
         &repo,
         issue_number,
         &config,
+        prompt_override,
         state.issue_client.clone(),
         state.git_runner.clone(),
         state.registry.clone(),

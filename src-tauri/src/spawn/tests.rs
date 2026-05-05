@@ -8,7 +8,10 @@ use crate::config::{Config, RepoEntry};
 use crate::error::{Error, Result};
 use crate::registry::{RegistryCmd, SessionSummary, SpawnSpec};
 
-use super::{spawn_issue_session, GitRunner, Issue, IssueClient};
+use super::{
+    parse_optimized_prompt, render_prompt, spawn_issue_session, GitRunner, Issue, IssueClient,
+    DEFAULT_SPAWN_PROMPT,
+};
 
 struct StubIssueClient {
     issue: Issue,
@@ -119,6 +122,7 @@ fn temp_config() -> (tempfile::TempDir, Config) {
             name: "demo".into(),
             path: "/dev/null".into(),
         }],
+        spawn_prompt_template: None,
         setup_done: true,
     };
     (dir, config)
@@ -144,6 +148,7 @@ async fn new_branch_path_uses_add_new() {
         &repo,
         7,
         &config,
+        None,
         issue_client,
         git.clone(),
         registry,
@@ -204,6 +209,7 @@ async fn existing_branch_path_uses_add_existing() {
         &repo,
         12,
         &config,
+        None,
         issue_client,
         git.clone(),
         registry,
@@ -249,6 +255,7 @@ async fn existing_worktree_skips_git_add() {
         &repo,
         99,
         &config,
+        None,
         issue_client,
         git.clone(),
         registry,
@@ -264,6 +271,186 @@ async fn existing_worktree_skips_git_add() {
         "no git worktree commands expected when worktree exists, got: {:?}",
         calls
     );
+}
+
+// ── Prompt rendering + override precedence ─────────────────────────────
+
+#[test]
+fn render_prompt_default_template() {
+    let rendered = render_prompt(DEFAULT_SPAWN_PROMPT, 7, "Add tab strip");
+    assert_eq!(
+        rendered,
+        "Use the issue-team skill to implement issue #7 (Add tab strip)."
+    );
+}
+
+#[test]
+fn render_prompt_custom_template_with_both_placeholders() {
+    let rendered = render_prompt(
+        "Implement {issue_title} (#{issue_number}) using feature-dev.",
+        42,
+        "Auth refactor",
+    );
+    assert_eq!(
+        rendered,
+        "Implement Auth refactor (#42) using feature-dev."
+    );
+}
+
+#[test]
+fn render_prompt_template_without_placeholders_passes_through() {
+    let rendered = render_prompt("just do something", 1, "ignored");
+    assert_eq!(rendered, "just do something");
+}
+
+#[tokio::test]
+async fn prompt_override_takes_precedence_over_config_template() {
+    let (_tmp, mut config) = temp_config();
+    config.spawn_prompt_template = Some("config template #{issue_number}".into());
+
+    let issue_client = Arc::new(StubIssueClient {
+        issue: Issue {
+            number: 5,
+            title: "x".into(),
+            labels: vec![],
+            url: "https://github.com/demo/demo/issues/5".into(),
+        },
+    });
+    let git = Arc::new(RecordingGit::default());
+    let captured: Arc<Mutex<Option<SpawnSpec>>> = Arc::new(Mutex::new(None));
+    let registry = fake_registry(Arc::clone(&captured));
+    let repo = config.repos[0].clone();
+
+    spawn_issue_session(
+        &repo,
+        5,
+        &config,
+        Some("override #{issue_number}".into()),
+        issue_client,
+        git,
+        registry,
+        80,
+        24,
+    )
+    .await
+    .expect("spawn ok");
+
+    let spec = captured.lock().unwrap().take().expect("Spawn captured");
+    match spec {
+        SpawnSpec::Claude { prompt, .. } => assert_eq!(prompt, "override #5"),
+        _ => panic!("expected Claude spec"),
+    }
+}
+
+#[tokio::test]
+async fn config_template_used_when_no_override() {
+    let (_tmp, mut config) = temp_config();
+    config.spawn_prompt_template =
+        Some("Saved: {issue_title} (#{issue_number})".into());
+
+    let issue_client = Arc::new(StubIssueClient {
+        issue: Issue {
+            number: 9,
+            title: "Bug fix".into(),
+            labels: vec![],
+            url: "https://github.com/demo/demo/issues/9".into(),
+        },
+    });
+    let git = Arc::new(RecordingGit::default());
+    let captured: Arc<Mutex<Option<SpawnSpec>>> = Arc::new(Mutex::new(None));
+    let registry = fake_registry(Arc::clone(&captured));
+    let repo = config.repos[0].clone();
+
+    spawn_issue_session(
+        &repo,
+        9,
+        &config,
+        None,
+        issue_client,
+        git,
+        registry,
+        80,
+        24,
+    )
+    .await
+    .expect("spawn ok");
+
+    let spec = captured.lock().unwrap().take().expect("Spawn captured");
+    match spec {
+        SpawnSpec::Claude { prompt, .. } => assert_eq!(prompt, "Saved: Bug fix (#9)"),
+        _ => panic!("expected Claude spec"),
+    }
+}
+
+#[tokio::test]
+async fn default_template_used_when_neither_override_nor_config() {
+    let (_tmp, config) = temp_config(); // spawn_prompt_template = None
+
+    let issue_client = Arc::new(StubIssueClient {
+        issue: Issue {
+            number: 3,
+            title: "Hello".into(),
+            labels: vec![],
+            url: "https://github.com/demo/demo/issues/3".into(),
+        },
+    });
+    let git = Arc::new(RecordingGit::default());
+    let captured: Arc<Mutex<Option<SpawnSpec>>> = Arc::new(Mutex::new(None));
+    let registry = fake_registry(Arc::clone(&captured));
+    let repo = config.repos[0].clone();
+
+    spawn_issue_session(
+        &repo,
+        3,
+        &config,
+        None,
+        issue_client,
+        git,
+        registry,
+        80,
+        24,
+    )
+    .await
+    .expect("spawn ok");
+
+    let spec = captured.lock().unwrap().take().expect("Spawn captured");
+    match spec {
+        SpawnSpec::Claude { prompt, .. } => assert_eq!(
+            prompt,
+            "Use the issue-team skill to implement issue #3 (Hello)."
+        ),
+        _ => panic!("expected Claude spec"),
+    }
+}
+
+// ── parse_optimized_prompt ─────────────────────────────────────────────
+
+#[test]
+fn parse_optimized_prompt_raw_json() {
+    let p = parse_optimized_prompt(r#"{"prompt": "rewritten"}"#).unwrap();
+    assert_eq!(p, "rewritten");
+}
+
+#[test]
+fn parse_optimized_prompt_with_fence() {
+    let raw = "```json\n{\"prompt\": \"fenced rewrite\"}\n```";
+    assert_eq!(parse_optimized_prompt(raw).unwrap(), "fenced rewrite");
+}
+
+#[test]
+fn parse_optimized_prompt_with_chatter() {
+    let raw = "Sure! Here you go:\n{\"prompt\": \"ok\"}\nLet me know.";
+    assert_eq!(parse_optimized_prompt(raw).unwrap(), "ok");
+}
+
+#[test]
+fn parse_optimized_prompt_no_object_errors() {
+    assert!(parse_optimized_prompt("nothing here").is_err());
+}
+
+#[test]
+fn parse_optimized_prompt_empty_string_errors() {
+    assert!(parse_optimized_prompt(r#"{"prompt": ""}"#).is_err());
 }
 
 // Make spawn::Error usable from tests

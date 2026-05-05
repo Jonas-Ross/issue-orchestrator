@@ -220,6 +220,21 @@ fn run_git(repo: &Path, leading: &[&str], trailing: &[&std::ffi::OsStr]) -> Resu
     Ok(())
 }
 
+/// Built-in fallback prompt used when neither a per-session override
+/// nor a saved `Config.spawn_prompt_template` is present. Mirrored on
+/// the frontend in `src/lib/spawn-prompt.ts` — keep them in sync.
+pub const DEFAULT_SPAWN_PROMPT: &str =
+    "Use the issue-team skill to implement issue #{issue_number} ({issue_title}).";
+
+/// Render a prompt template by replacing the two supported placeholders
+/// literally. Templates with no placeholders pass through unchanged so
+/// the user can opt out of interpolation entirely.
+pub fn render_prompt(template: &str, issue_number: u64, issue_title: &str) -> String {
+    template
+        .replace("{issue_number}", &issue_number.to_string())
+        .replace("{issue_title}", issue_title)
+}
+
 /// End-to-end spawn flow for an `issue-team` session:
 ///
 /// 1. Look up the issue title via the issue client.
@@ -229,10 +244,15 @@ fn run_git(repo: &Path, leading: &[&str], trailing: &[&std::ffi::OsStr]) -> Resu
 ///    the existing branch (if any) or with `-b` (new branch).
 /// 4. Send `RegistryCmd::Spawn` for a `Claude` PTY in that cwd, with
 ///    `ISSUE_ORCH_SESSION_ID` seeded by the registry from its UUID.
+///
+/// Prompt resolution order: `prompt_override` → `config.spawn_prompt_template`
+/// → `DEFAULT_SPAWN_PROMPT`. The chosen template is then rendered via
+/// `render_prompt` to interpolate `{issue_number}` / `{issue_title}`.
 pub async fn spawn_issue_session(
     repo: &RepoEntry,
     issue_number: u64,
     config: &Config,
+    prompt_override: Option<String>,
     issue_client: Arc<dyn IssueClient>,
     git: Arc<dyn GitRunner>,
     registry: mpsc::Sender<RegistryCmd>,
@@ -260,10 +280,11 @@ pub async fn spawn_issue_session(
         info!(path = %worktree_path.display(), "reusing existing worktree");
     }
 
-    let prompt = format!(
-        "Use the issue-team skill to implement issue #{} ({}).",
-        issue.number, issue.title
-    );
+    let template = prompt_override
+        .as_deref()
+        .or(config.spawn_prompt_template.as_deref())
+        .unwrap_or(DEFAULT_SPAWN_PROMPT);
+    let prompt = render_prompt(template, issue.number, &issue.title);
     let title = format!("#{} {}", issue.number, truncate(&issue.title, 40));
 
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -372,6 +393,75 @@ fn build_decide_prompt(issues: &[Issue]) -> String {
          Schema: {{\"number\": <issue number>, \"reasoning\": \"<one short sentence>\"}}\n\n\
          Issues:\n{lines}"
     )
+}
+
+/// Run a one-shot `claude -p` inside the chosen repo so the model can
+/// inspect the skills, plugins and MCPs available to a session there,
+/// then ask it to rewrite `current_prompt` to take better advantage of
+/// them. Returns the rewritten template (placeholders preserved).
+pub async fn optimize_spawn_prompt(
+    repo: &RepoEntry,
+    current_prompt: &str,
+) -> Result<String> {
+    let repo_path = PathBuf::from(&repo.path);
+    let prompt = build_optimize_prompt(current_prompt);
+
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("claude")
+            .arg("-p")
+            .arg(&prompt)
+            .current_dir(&repo_path)
+            .output(),
+    )
+    .await
+    .map_err(|_| Error::Spawn("claude -p timed out after 60s".into()))?
+    .map_err(|e| Error::Spawn(format!("claude: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Spawn(format!(
+            "claude -p failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_optimized_prompt(&stdout)
+}
+
+fn build_optimize_prompt(current_prompt: &str) -> String {
+    format!(
+        "You are improving a prompt template that will spawn a Claude Code session to implement \
+         a GitHub issue. The session runs inside this repository, so you have access to its \
+         skills, plugins, MCPs, hooks and CLAUDE.md.\n\n\
+         Inspect what's available in this session and rewrite the template to make better use of \
+         the most relevant skills (e.g. issue-team, feature-dev), tools, or MCPs you find. \
+         Preserve the literal placeholders `{{issue_number}}` and `{{issue_title}}` somewhere in \
+         the output so they can be interpolated at spawn time. Keep the result a single \
+         template string — do not split it into multiple instructions or steps.\n\n\
+         Output ONLY a single JSON object — no preamble, no fenced code block, no commentary.\n\
+         Schema: {{\"prompt\": \"<rewritten template>\"}}\n\n\
+         Current template:\n{current_prompt}"
+    )
+}
+
+/// Tolerantly extract a rewritten prompt from `claude -p` stdout. Same
+/// fence/chatter tolerance as `parse_decision`.
+pub fn parse_optimized_prompt(raw: &str) -> Result<String> {
+    #[derive(Deserialize)]
+    struct OptimizedPrompt {
+        prompt: String,
+    }
+    let trimmed = raw.trim();
+    let cleaned = strip_fence(trimmed);
+    let json_str = extract_first_object(cleaned)
+        .ok_or_else(|| Error::Spawn(format!("no JSON object in claude output: {raw}")))?;
+    let parsed: OptimizedPrompt = serde_json::from_str(json_str)
+        .map_err(|e| Error::Spawn(format!("parse optimized prompt json: {e} (input: {json_str})")))?;
+    if parsed.prompt.trim().is_empty() {
+        return Err(Error::Spawn("model returned empty prompt".into()));
+    }
+    Ok(parsed.prompt)
 }
 
 /// Tolerantly extract a `Decision` from `claude -p` stdout. The model is

@@ -7,6 +7,7 @@ import { Modal } from "../Modal";
 import { IssueList } from "./IssueList";
 import { IssuePickerHeader } from "./IssuePickerHeader";
 import { IssuePickerToolbar } from "./IssuePickerToolbar";
+import { IssuePromptPreview } from "./IssuePromptPreview";
 import { IssuesStatusBanner } from "./IssuesStatusBanner";
 import { RepoSelect } from "./RepoSelect";
 import { RepoStatusBanner } from "./RepoStatusBanner";
@@ -18,6 +19,7 @@ import { useIssuesList } from "./use-issues-list";
 import { usePickerKeyboard } from "./use-picker-keyboard";
 import { usePickerRepos } from "./use-picker-repos";
 import { usePriorityFocus } from "./use-priority-focus";
+import { usePromptDraft } from "./use-prompt-draft";
 
 /// Thin wrapper that mounts/unmounts the inner picker around the open
 /// signal. Keeping the hook-bearing code in `IssuePickerInner` means
@@ -60,16 +62,22 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
     listRef,
   );
   const [highlightedIndex, setHighlightedIndex] = useHighlightedIssue(filteredIssues, listRef);
+  const highlightedIssue =
+    highlightedIndex !== null ? (filteredIssues[highlightedIndex] ?? null) : null;
+  const promptDraft = usePromptDraft(highlightedIssue);
 
   const onSpawn = useCallback(
     async (issue: Issue) => {
       if (!selectedRepo || spawning !== null) return;
       setSpawning(issue.number);
+      // Pass the rendered override only when this issue has one — otherwise
+      // the backend resolves saved-template → default on its own.
       const result = await commands.spawnIssueSession(
         selectedRepo,
         issue.number,
         DEFAULT_PTY_COLS,
         DEFAULT_PTY_ROWS,
+        promptDraft.getOverrideFor(issue),
       );
       setSpawning(null);
       if (result.status === "error") {
@@ -79,7 +87,7 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
       activeId.value = result.data.id;
       closePicker();
     },
-    [selectedRepo, spawning, setIssues],
+    [selectedRepo, spawning, setIssues, promptDraft],
   );
 
   usePickerKeyboard({
@@ -135,6 +143,9 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
         />
       )}
       <IssuesStatusBanner selectedRepo={selectedRepo} issues={issues} />
+      {selectedRepo && hasIssues && (
+        <IssuePromptPreview issue={highlightedIssue} draft={promptDraft} />
+      )}
       {selectedRepo && hasIssues && (
         <IssueList
           listRef={listRef}

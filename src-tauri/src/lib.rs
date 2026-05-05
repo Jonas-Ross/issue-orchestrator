@@ -44,6 +44,8 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::list_issues,
             ipc::get_issue_body,
             ipc::decide_next_issue,
+            ipc::update_spawn_prompt,
+            ipc::optimize_spawn_prompt,
             ipc::spawn_issue_session,
         ])
         .events(collect_events![
