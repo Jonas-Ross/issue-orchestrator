@@ -160,11 +160,28 @@ fn strip_fence(s: &str) -> &str {
     s
 }
 
+/// Slice the first balanced `{...}` block out of `s`, ignoring braces
+/// that appear inside JSON string literals so payloads like
+/// `{"reasoning": "use {brace}"}` parse correctly. Tracks `\` escapes
+/// inside strings so an escaped quote (`\"`) doesn't end the string.
 fn extract_first_object(s: &str) -> Option<&str> {
     let start = s.find('{')?;
     let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape = false;
     for (i, c) in s[start..].char_indices() {
+        if in_string {
+            if escape {
+                escape = false;
+            } else if c == '\\' {
+                escape = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
         match c {
+            '"' => in_string = true,
             '{' => depth += 1,
             '}' => {
                 depth -= 1;
@@ -215,5 +232,21 @@ mod tests {
     #[test]
     fn errors_with_no_object() {
         assert!(parse_decision("nothing here").is_err());
+    }
+
+    #[test]
+    fn brace_inside_string_value_does_not_break_parsing() {
+        let raw = r#"{"id": "12", "reasoning": "use {brace} carefully"}"#;
+        let d = parse_decision(raw).unwrap();
+        assert_eq!(d.id, "12");
+        assert_eq!(d.reasoning, "use {brace} carefully");
+    }
+
+    #[test]
+    fn escaped_quote_inside_string_does_not_break_parsing() {
+        let raw = r#"{"id": "5", "reasoning": "they said \"go\" today"}"#;
+        let d = parse_decision(raw).unwrap();
+        assert_eq!(d.id, "5");
+        assert_eq!(d.reasoning, r#"they said "go" today"#);
     }
 }
