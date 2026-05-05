@@ -57,6 +57,10 @@ export function CommandPalette() {
       });
     }
     return out;
+    // Reading `signal.value` inside the memo IS the reactive subscription
+    // we want; oxlint's react-hooks/exhaustive-deps doesn't recognize that
+    // pattern and flags `sessions` / `activeId` as unnecessary.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions.value, activeId.value]);
 
   const filtered = useMemo(() => {
@@ -75,7 +79,7 @@ export function CommandPalette() {
   }, [all, query]);
 
   useEffect(() => {
-    if (activeIdx >= filtered.length) setActiveIdx(0);
+    setActiveIdx((i) => (i >= filtered.length ? 0 : i));
   }, [filtered.length]);
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -93,11 +97,7 @@ export function CommandPalette() {
 
   return (
     <div class="modal-overlay" onClick={() => closePalette()}>
-      <div
-        class="modal"
-        style={{ width: 480 }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div class="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
           class="palette-input"
@@ -121,9 +121,7 @@ export function CommandPalette() {
             >
               <span>{a.label}</span>
               {a.hint && (
-                <span style={{ float: "right", opacity: 0.6, fontSize: 11 }}>
-                  {a.hint}
-                </span>
+                <span style={{ float: "right", opacity: 0.6, fontSize: 11 }}>{a.hint}</span>
               )}
             </li>
           ))}
