@@ -1,15 +1,19 @@
 import { signal } from "@preact/signals";
 
-export const paletteOpen = signal(false);
-
-export function openPalette() {
-  paletteOpen.value = true;
+export function createPaletteState() {
+  const paletteOpen = signal(false);
+  const openPalette = () => {
+    paletteOpen.value = true;
+  };
+  const closePalette = () => {
+    paletteOpen.value = false;
+  };
+  const togglePalette = () => {
+    paletteOpen.value = !paletteOpen.value;
+  };
+  return { paletteOpen, openPalette, closePalette, togglePalette };
 }
 
-export function closePalette() {
-  paletteOpen.value = false;
-}
-
-export function togglePalette() {
-  paletteOpen.value = !paletteOpen.value;
-}
+export const paletteState = createPaletteState();
+export const { paletteOpen, openPalette, closePalette, togglePalette } =
+  paletteState;

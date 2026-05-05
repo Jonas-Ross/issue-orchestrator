@@ -2,22 +2,27 @@ import { signal } from "@preact/signals";
 
 const KEY = "io.sidebar.collapsed";
 
-const initial = (() => {
+function loadInitial(storage: Storage): boolean {
   try {
-    return localStorage.getItem(KEY) === "1";
+    return storage.getItem(KEY) === "1";
   } catch {
     return false;
   }
-})();
-
-export const sidebarCollapsed = signal(initial);
-
-export function toggleSidebar() {
-  const next = !sidebarCollapsed.value;
-  sidebarCollapsed.value = next;
-  try {
-    localStorage.setItem(KEY, next ? "1" : "0");
-  } catch {
-    /* private mode: skip */
-  }
 }
+
+export function createSidebarStore(storage: Storage = localStorage) {
+  const sidebarCollapsed = signal(loadInitial(storage));
+  function toggleSidebar() {
+    const next = !sidebarCollapsed.value;
+    sidebarCollapsed.value = next;
+    try {
+      storage.setItem(KEY, next ? "1" : "0");
+    } catch {
+      /* private mode: skip */
+    }
+  }
+  return { sidebarCollapsed, toggleSidebar };
+}
+
+export const sidebarStore = createSidebarStore();
+export const { sidebarCollapsed, toggleSidebar } = sidebarStore;

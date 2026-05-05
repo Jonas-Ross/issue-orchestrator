@@ -14,6 +14,8 @@ driven by Claude Code's hook system over a Unix domain socket. macOS-only.
 cargo tauri dev                                                  # canonical dev loop (NOT npm run dev alone)
 cargo test --manifest-path src-tauri/Cargo.toml --lib            # all backend tests
 cargo test --manifest-path src-tauri/Cargo.toml --lib spawn::    # one module
+npm test                                                         # frontend Vitest suite (one-shot)
+npm run test:watch                                               # frontend Vitest watch mode
 npm run bindings                                                 # regenerate src/lib/bindings.ts (also runs via predev/prebuild)
 npm run build                                                    # tsc + vite production build
 ```
@@ -105,13 +107,29 @@ all sessions.
 
 ### Frontend PTY demuxer (`src/state/pty-stream.ts`)
 
-A single module-level listener for `events.ptyData` is started once at boot.
-It buffers chunks per `sessionId` until a `<TerminalView>` calls
-`attachTerminal`, then drains. This solves the race where the PTY emits
-bytes before the React tree has mounted the matching xterm. xterm
-`Terminal` instances are heavy: keep them mounted (off-screen for inactive
-tabs) rather than recreating on tab switch, and call `term.dispose()` on
-session kill — not just on unmount.
+A single listener for `events.ptyData` is started once at boot via
+`startPtyStream()` on the singleton `ptyStreamStore`. It buffers chunks per
+`sessionId` until a `<TerminalView>` calls `attachTerminal`, then drains.
+This solves the race where the PTY emits bytes before the React tree has
+mounted the matching xterm. xterm `Terminal` instances are heavy: keep them
+mounted (off-screen for inactive tabs) rather than recreating on tab
+switch, and call `term.dispose()` on session kill — not just on unmount.
+
+### Frontend state pattern (`src/state/*.ts`)
+
+Every state module follows **factory + singleton + named-export
+destructure**: `createXState()` builds a fresh closure (signals + helpers),
+the module then constructs and exports a default `xStore` plus
+re-destructures every member as a named binding. Components import the
+named bindings directly (`import { sessions, addSession } from
+"../state/sessions"`); tests construct fresh state per `it()` via
+`createXState()` so cases never share signals.
+
+When adding a new state module, follow the existing template (see
+`src/state/palette.ts` — smallest reference). Modules that touch
+`localStorage` accept an optional `storage: Storage = localStorage`
+parameter so tests can inject; jsdom provides a real `localStorage` so
+production tests use the default.
 
 ### App-data layout (macOS hardcoded — `src-tauri/src/paths.rs`)
 
@@ -128,14 +146,49 @@ plugin-distribution model.
 
 ## Test strategy
 
-Backend has unit tests for the three pillars:
+### Backend (Rust)
+
+Unit tests for the three pillars:
 - `registry/tests.rs` — actor command round-trips, event emission, real-PTY data flow.
 - `hooks/tests.rs` — status mapping, JSONL persistence, unknown-session drop.
 - `spawn/tests.rs` — mocks `IssueClient` and `GitRunner` to cover the
   new-branch, existing-branch, and existing-worktree paths.
 
-There are no frontend tests yet; UI verification is manual via the README's
-verification checklist.
+### Frontend (Vitest + jsdom + @testing-library/preact)
+
+Run with `npm test`. Co-located in `__tests__/` subdirs next to the source.
+Templates for each pattern live under `src/state/__tests__/` —
+`palette.test.ts` (pure state), `settings.test.ts` (state + localStorage),
+`repos.test.ts` (Tauri command mock), `pty-stream.test.ts` (Tauri event
+mock), `keymap.test.tsx` (hook test via wrapper component). Component
+exemplar at `src/components/__tests__/CommandPalette.test.tsx`.
+
+**Tauri mocking** — use the helpers in [src/test/tauri-mock.ts](src/test/tauri-mock.ts):
+
+```ts
+mockCommands({
+  list_repos: () => [{ name: "alpha", path: "/x" }],   // snake_case IPC names
+  add_repo: (args) => ({ name: "x", path: args.path }),
+});
+await emitTauriEvent("pty-data", { sessionId, chunk });  // fires listen() callbacks
+```
+
+`mockCommands` **throws on any unmocked command**. This is intentional and
+load-bearing: a new `commands.foo()` call in production code instantly
+turns red in any test that brushes that path, so IPC drift can't sneak by.
+
+**Out of scope for unit tests** — `src/components/TerminalView.tsx`
+(xterm), `src/components/IssuePicker.tsx` (464 LOC, defer to E2E),
+`src/lib/bindings.ts` (auto-generated). All excluded from coverage in
+`vitest.config.ts`. UI verification beyond unit tests is still manual via
+the README's verification checklist; E2E (`tauri-driver`) is deferred.
+
+**Node 25 quirk** — the test scripts wrap with `NODE_OPTIONS=--no-webstorage`
+because Node 25 enables a native `localStorage` global that collides with
+jsdom's. Don't remove the flag from the scripts.
+
+`vitest/globals` is in `tsconfig.json` `types`, so `describe`/`it`/`expect`
+work without per-file imports.
 
 ## Things that are deliberately out of scope
 

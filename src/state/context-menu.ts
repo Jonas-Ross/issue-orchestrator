@@ -10,12 +10,17 @@ export interface ContextMenuState {
   items: ContextMenuItem[];
 }
 
-export const contextMenu = signal<ContextMenuState | null>(null);
-
-export function openContextMenu(state: ContextMenuState) {
-  contextMenu.value = state;
+export function createContextMenuState() {
+  const contextMenu = signal<ContextMenuState | null>(null);
+  const openContextMenu = (state: ContextMenuState) => {
+    contextMenu.value = state;
+  };
+  const closeContextMenu = () => {
+    contextMenu.value = null;
+  };
+  return { contextMenu, openContextMenu, closeContextMenu };
 }
 
-export function closeContextMenu() {
-  contextMenu.value = null;
-}
+export const contextMenuStore = createContextMenuState();
+export const { contextMenu, openContextMenu, closeContextMenu } =
+  contextMenuStore;

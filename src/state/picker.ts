@@ -8,12 +8,16 @@ export interface PickerState {
   repoName: string | null;
 }
 
-export const pickerOpen = signal<PickerState | null>(null);
-
-export function openPicker(repoName: string | null = null) {
-  pickerOpen.value = { repoName };
+export function createPickerState() {
+  const pickerOpen = signal<PickerState | null>(null);
+  const openPicker = (repoName: string | null = null) => {
+    pickerOpen.value = { repoName };
+  };
+  const closePicker = () => {
+    pickerOpen.value = null;
+  };
+  return { pickerOpen, openPicker, closePicker };
 }
 
-export function closePicker() {
-  pickerOpen.value = null;
-}
+export const pickerStore = createPickerState();
+export const { pickerOpen, openPicker, closePicker } = pickerStore;
