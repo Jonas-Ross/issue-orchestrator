@@ -5,6 +5,7 @@ src-tauri/gen/
 # Node
 node_modules/
 dist/
+coverage/
 
 # Generated bindings
 src/lib/bindings.ts
