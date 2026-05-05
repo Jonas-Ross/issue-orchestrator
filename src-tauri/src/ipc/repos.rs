@@ -11,30 +11,23 @@ use super::AppState;
 
 #[tauri::command]
 #[specta::specta]
-pub fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoEntry>, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    Ok(config.repos.clone())
+pub async fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoEntry>, String> {
+    state.config.list_repos().await.map_err(Into::into)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn add_repo(state: State<'_, AppState>, path: String) -> Result<RepoEntry, String> {
+pub async fn add_repo(state: State<'_, AppState>, path: String) -> Result<RepoEntry, String> {
     let path = PathBuf::from(&path);
     spawn::validate_git_repo(&path).map_err(|e| e.to_string())?;
-    let mut config = state.config.lock().map_err(|e| e.to_string())?;
-    let entry = config.add_repo(&path).map_err(|e| e.to_string())?;
-    config.save(&state.config_path).map_err(|e| e.to_string())?;
-    Ok(entry)
+    state.config.add_repo(path).await.map_err(Into::into)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn remove_repo(state: State<'_, AppState>, name: String) -> Result<(), String> {
     refuse_if_live_sessions(&state, &name).await?;
-    let mut config = state.config.lock().map_err(|e| e.to_string())?;
-    config.remove_repo(&name).map_err(|e| e.to_string())?;
-    config.save(&state.config_path).map_err(|e| e.to_string())?;
-    Ok(())
+    state.config.remove_repo(name).await.map_err(Into::into)
 }
 
 /// Replace a repo's issue provider in-memory and on disk. Refuses while
@@ -48,12 +41,11 @@ pub async fn update_repo_provider(
     provider: IssueProvider,
 ) -> Result<RepoEntry, String> {
     refuse_if_live_sessions(&state, &repo_name).await?;
-    let mut config = state.config.lock().map_err(|e| e.to_string())?;
-    let entry = config
-        .update_repo_provider(&repo_name, provider)
-        .map_err(|e| e.to_string())?;
-    config.save(&state.config_path).map_err(|e| e.to_string())?;
-    Ok(entry)
+    state
+        .config
+        .update_repo_provider(repo_name, provider)
+        .await
+        .map_err(Into::into)
 }
 
 /// Shared guard for the two mutators that would invalidate a running

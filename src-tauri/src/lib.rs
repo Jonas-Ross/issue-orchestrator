@@ -15,7 +15,7 @@ pub mod spawn;
 #[allow(dead_code)]
 const _ICON_TRACKER: &[u8] = include_bytes!("../icons/icon.icns");
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events, Builder};
@@ -99,10 +99,11 @@ pub fn run() {
                 }
             });
 
+            let config_handle = config::ConfigActor::spawn(config.clone(), config_path.clone());
+
             app.manage(ipc::AppState {
                 registry: registry_tx,
-                config_path: config_path.clone(),
-                config: Mutex::new(config.clone()),
+                config: config_handle,
                 git_runner: Arc::new(spawn::GitCli),
                 http: reqwest::Client::new(),
             });

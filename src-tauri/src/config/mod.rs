@@ -5,6 +5,9 @@ use specta::Type;
 
 use crate::error::{Error, Result};
 
+mod actor;
+pub use actor::{ConfigActor, ConfigHandle};
+
 /// Per-repo issue source. The `kind` discriminator is what the factory in
 /// `crate::issues::make_client` matches on. Tokens for `Jira` / `Linear`
 /// live in the macOS Keychain — never in this struct, never in

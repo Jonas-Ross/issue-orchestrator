@@ -5,26 +5,24 @@ pub mod repos;
 pub mod secrets;
 pub mod setup;
 
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 use tauri_specta::Event;
 use tokio::sync::mpsc;
 use tracing::warn;
 
-use crate::config::{Config, RepoEntry};
+use crate::config::ConfigHandle;
 use crate::registry::{RegistryCmd, RegistryEvent};
 use crate::spawn::GitRunner;
 
-/// Tauri-managed state — actor mailbox plus paths/config and the git
+/// Tauri-managed state — actor mailboxes (registry + config) and the git
 /// runner. The issue client is constructed per-call by `issues::make_client`
 /// from the target repo's `IssueProvider`, so different repos can use
 /// different sources (GitHub / Jira / Linear) within one session.
 pub struct AppState {
     pub registry: mpsc::Sender<RegistryCmd>,
-    pub config_path: PathBuf,
-    pub config: Mutex<Config>,
+    pub config: ConfigHandle,
     pub git_runner: Arc<dyn GitRunner>,
     /// Shared HTTP client. `reqwest::Client::new()` allocates a fresh
     /// connection pool and rustls context, so we build it once at app
@@ -57,21 +55,4 @@ fn forward(app: &AppHandle, evt: RegistryEvent) -> tauri::Result<()> {
             events::StatusChange { session_id, status }.emit(app)
         }
     }
-}
-
-/// Find a repo by name in the locked config, cloning it out so callers
-/// don't hold the mutex across `.await`. Used by every command that
-/// needs the full `RepoEntry` (issue commands, spawn). Removed in the
-/// follow-up that converts `AppState.config` to a config actor.
-pub(crate) fn lookup_repo(
-    state: &State<'_, AppState>,
-    repo_name: &str,
-) -> Result<RepoEntry, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    config
-        .repos
-        .iter()
-        .find(|r| r.name == repo_name)
-        .cloned()
-        .ok_or_else(|| format!("unknown repo: {repo_name}"))
 }

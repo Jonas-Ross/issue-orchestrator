@@ -6,7 +6,7 @@ use crate::issues;
 use crate::registry::SessionSummary;
 use crate::spawn::{self, Decision, Issue};
 
-use super::{lookup_repo, AppState};
+use super::AppState;
 
 #[tauri::command]
 #[specta::specta]
@@ -14,7 +14,7 @@ pub async fn list_issues(
     state: State<'_, AppState>,
     repo_name: String,
 ) -> Result<Vec<Issue>, String> {
-    let repo = lookup_repo(&state, &repo_name)?;
+    let repo = state.config.lookup_repo(&repo_name).await.map_err(|e| e.to_string())?;
     let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
     let path = PathBuf::from(&repo.path);
     client.list(&path).await.map_err(Into::into)
@@ -27,7 +27,7 @@ pub async fn get_issue_body(
     repo_name: String,
     issue_id: String,
 ) -> Result<String, String> {
-    let repo = lookup_repo(&state, &repo_name)?;
+    let repo = state.config.lookup_repo(&repo_name).await.map_err(|e| e.to_string())?;
     let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
     let path = PathBuf::from(&repo.path);
     client.body(&path, &issue_id).await.map_err(Into::into)
@@ -39,7 +39,7 @@ pub async fn decide_next_issue(
     state: State<'_, AppState>,
     repo_name: String,
 ) -> Result<Decision, String> {
-    let repo = lookup_repo(&state, &repo_name)?;
+    let repo = state.config.lookup_repo(&repo_name).await.map_err(|e| e.to_string())?;
     let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
     spawn::decide_next_issue(&repo, client)
         .await
@@ -55,10 +55,7 @@ pub async fn update_spawn_prompt(
     state: State<'_, AppState>,
     template: Option<String>,
 ) -> Result<(), String> {
-    let mut config = state.config.lock().map_err(|e| e.to_string())?;
-    config.spawn_prompt_template = template.filter(|t| !t.trim().is_empty());
-    config.save(&state.config_path).map_err(|e| e.to_string())?;
-    Ok(())
+    state.config.update_spawn_prompt(template).await.map_err(Into::into)
 }
 
 /// Ask `claude -p` (running in the chosen repo's cwd) to rewrite the
@@ -72,7 +69,7 @@ pub async fn optimize_spawn_prompt(
     repo_name: String,
     current_prompt: String,
 ) -> Result<String, String> {
-    let repo = lookup_repo(&state, &repo_name)?;
+    let repo = state.config.lookup_repo(&repo_name).await.map_err(|e| e.to_string())?;
     spawn::optimize_spawn_prompt(&repo, &current_prompt)
         .await
         .map_err(Into::into)
@@ -88,8 +85,8 @@ pub async fn spawn_issue_session(
     rows: u16,
     prompt_override: Option<String>,
 ) -> Result<SessionSummary, String> {
-    let repo = lookup_repo(&state, &repo_name)?;
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    let repo = state.config.lookup_repo(&repo_name).await.map_err(|e| e.to_string())?;
+    let config = state.config.snapshot().await.map_err(|e| e.to_string())?;
     let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
 
     spawn::spawn_issue_session(
