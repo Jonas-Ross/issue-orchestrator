@@ -64,8 +64,74 @@ pub(super) fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltComma
 
 fn apply_common_env(cmd: &mut CommandBuilder, orch_id: &str) {
     for (k, v) in std::env::vars() {
+        if should_drop_env(&k) {
+            continue;
+        }
         cmd.env(k, v);
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("ISSUE_ORCH_SESSION_ID", orch_id);
+}
+
+/// Drop credential-shaped env vars from the inherited env so a session
+/// PTY can't see (and a misbehaving subprocess can't exfiltrate) the
+/// dev's cloud secrets, DB passwords, etc. Workflow-relevant API keys
+/// (ANTHROPIC_*, OPENAI_*, JIRA_*, GH_TOKEN, GITHUB_TOKEN) are kept —
+/// dropping those would break the user's `gh` / `claude` setup.
+fn should_drop_env(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "AWS_ACCESS_KEY_ID"
+            | "AWS_SECRET_ACCESS_KEY"
+            | "AWS_SESSION_TOKEN"
+            | "GOOGLE_APPLICATION_CREDENTIALS"
+    ) {
+        return true;
+    }
+    upper.ends_with("_PASSWORD")
+        || upper.ends_with("_PASSWD")
+        || upper.ends_with("_SECRET")
+        || (upper.starts_with("GCP_") && upper.ends_with("_KEY"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_drop_env;
+
+    #[test]
+    fn drops_aws_secret_triple() {
+        assert!(should_drop_env("AWS_ACCESS_KEY_ID"));
+        assert!(should_drop_env("AWS_SECRET_ACCESS_KEY"));
+        assert!(should_drop_env("AWS_SESSION_TOKEN"));
+    }
+
+    #[test]
+    fn drops_google_application_credentials() {
+        assert!(should_drop_env("GOOGLE_APPLICATION_CREDENTIALS"));
+    }
+
+    #[test]
+    fn drops_password_suffix_variants() {
+        assert!(should_drop_env("DB_PASSWORD"));
+        assert!(should_drop_env("MYSQL_PASSWD"));
+        assert!(should_drop_env("REDIS_SECRET"));
+    }
+
+    #[test]
+    fn drops_gcp_keys() {
+        assert!(should_drop_env("GCP_SA_KEY"));
+    }
+
+    #[test]
+    fn keeps_workflow_keys() {
+        assert!(!should_drop_env("ANTHROPIC_API_KEY"));
+        assert!(!should_drop_env("OPENAI_API_KEY"));
+        assert!(!should_drop_env("GITHUB_TOKEN"));
+        assert!(!should_drop_env("GH_TOKEN"));
+        assert!(!should_drop_env("JIRA_TOKEN"));
+        assert!(!should_drop_env("PATH"));
+        assert!(!should_drop_env("HOME"));
+        assert!(!should_drop_env("SHELL"));
+    }
 }
