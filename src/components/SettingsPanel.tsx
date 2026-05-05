@@ -6,6 +6,7 @@ import { closeSettings, settings, settingsPanelOpen, updateSetting } from "../st
 import { repos } from "../state/repos";
 import { sessions } from "../state/sessions";
 import { Modal } from "./Modal";
+import { PromptSection } from "./SettingsPanel/PromptSection";
 
 /// Thin wrapper that mounts/unmounts the inner panel around the open
 /// signal. Same pattern as IssuePicker — keeps hooks contract clean.
@@ -27,6 +28,12 @@ const CATEGORIES: Category[] = [
     label: "Repos",
     glyph: "⌘",
     Render: () => <ReposSection />,
+  },
+  {
+    id: "prompt",
+    label: "Prompt",
+    glyph: "✎",
+    Render: () => <PromptSection />,
   },
   {
     id: "about",

@@ -18,6 +18,12 @@ pub struct Config {
     pub version: u32,
     pub worktree_root: String,
     pub repos: Vec<RepoEntry>,
+    /// User-configured spawn prompt template. `None` means "use the
+    /// built-in `DEFAULT_SPAWN_PROMPT`". Marking the field
+    /// `default`-on-deserialize means existing `config.json` files
+    /// without it round-trip cleanly to `None`.
+    #[serde(default)]
+    pub spawn_prompt_template: Option<String>,
     pub setup_done: bool,
 }
 
@@ -27,6 +33,7 @@ impl Default for Config {
             version: 1,
             worktree_root: "~/dev/worktrees".into(),
             repos: Vec::new(),
+            spawn_prompt_template: None,
             setup_done: false,
         }
     }
@@ -178,5 +185,32 @@ mod tests {
         let mut config = empty_config();
         let err = config.remove_repo("nope").unwrap_err();
         assert!(matches!(err, Error::Config(_)));
+    }
+
+    #[test]
+    fn deserializes_legacy_config_without_spawn_prompt_template() {
+        // A config.json saved before this field existed must still load
+        // and produce `None`, not a parse error.
+        let legacy = r#"{
+            "version": 1,
+            "worktreeRoot": "~/dev/worktrees",
+            "repos": [],
+            "setupDone": true
+        }"#;
+        let parsed: Config = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.spawn_prompt_template, None);
+        assert!(parsed.setup_done);
+    }
+
+    #[test]
+    fn round_trips_spawn_prompt_template() {
+        let mut original = Config::default();
+        original.spawn_prompt_template = Some("Custom #{issue_number}".into());
+        let json = serde_json::to_string(&original).unwrap();
+        let parsed: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            parsed.spawn_prompt_template.as_deref(),
+            Some("Custom #{issue_number}")
+        );
     }
 }
