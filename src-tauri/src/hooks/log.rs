@@ -1,9 +1,10 @@
-use std::fs::{File, OpenOptions};
-use std::io::Write;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::Value;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
 
@@ -11,31 +12,33 @@ use crate::error::{Error, Result};
 /// received over the socket (so the schema can drift over time and we
 /// still have the raw record). `Logger` is `Clone` so each accept-loop
 /// task can hold its own handle; mutation is serialized via the inner
-/// Mutex.
+/// async Mutex so we don't block the runtime under hook bursts.
 #[derive(Clone)]
 pub struct Logger {
     inner: Arc<Mutex<File>>,
 }
 
 impl Logger {
-    pub fn open(path: &Path) -> Result<Self> {
+    pub async fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            tokio::fs::create_dir_all(parent).await?;
         }
-        let file = OpenOptions::new().create(true).append(true).open(path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .await?;
         Ok(Self {
             inner: Arc::new(Mutex::new(file)),
         })
     }
 
-    pub fn append(&self, raw: &Value) -> Result<()> {
-        let mut f = self
-            .inner
-            .lock()
-            .map_err(|e| Error::Hooks(format!("log lock: {e}")))?;
-        serde_json::to_writer(&mut *f, raw).map_err(|e| Error::Hooks(e.to_string()))?;
-        f.write_all(b"\n")?;
-        f.flush()?;
+    pub async fn append(&self, raw: &Value) -> Result<()> {
+        let mut bytes = serde_json::to_vec(raw).map_err(|e| Error::Hooks(e.to_string()))?;
+        bytes.push(b'\n');
+        let mut f = self.inner.lock().await;
+        f.write_all(&bytes).await?;
+        f.flush().await?;
         Ok(())
     }
 }

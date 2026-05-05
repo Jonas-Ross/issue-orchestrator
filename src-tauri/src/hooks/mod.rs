@@ -84,7 +84,7 @@ pub async fn run_listener(
     }
     let listener = UnixListener::bind(&sock_path)
         .map_err(|e| Error::Hooks(format!("bind {}: {e}", sock_path.display())))?;
-    let logger = Logger::open(&log_path)?;
+    let logger = Logger::open(&log_path).await?;
     info!(socket = %sock_path.display(), log = %log_path.display(), "hook listener started");
 
     loop {
@@ -126,7 +126,7 @@ async fn handle_connection(
     while let Some(result) = stream.next() {
         match result {
             Ok(value) => {
-                if let Err(e) = logger.append(&value) {
+                if let Err(e) = logger.append(&value).await {
                     warn!(?e, "failed to append hook event to log");
                 }
                 match HookEvent::from_value(value) {
