@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tokio::process::Command;
@@ -11,10 +10,15 @@ use tracing::info;
 
 use crate::config::{Config, RepoEntry};
 use crate::error::{Error, Result};
+use crate::issues::{sanitize_branch, IssueClient};
 use crate::registry::{RegistryCmd, SessionSummary, SpawnSpec};
 
 #[cfg(test)]
 mod tests;
+
+// Re-exported so existing imports `use crate::spawn::Issue;` keep working.
+pub use crate::issues::Issue;
+
 
 /// Cheap check that a path looks like a git working copy. Accepts both
 /// regular repos (`.git/` directory) and linked worktrees (`.git` file
@@ -36,118 +40,6 @@ pub fn validate_git_repo(path: &Path) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-#[derive(Clone, Debug, Type, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Issue {
-    pub number: u64,
-    pub title: String,
-    pub labels: Vec<String>,
-    pub url: String,
-}
-
-/// Boundary trait for the GitHub CLI. Stored in `AppState` as
-/// `Arc<dyn IssueClient>` so tests can swap a mock in without touching
-/// real `gh`.
-#[async_trait]
-pub trait IssueClient: Send + Sync {
-    async fn list(&self, repo_path: &Path) -> Result<Vec<Issue>>;
-    async fn view(&self, repo_path: &Path, number: u64) -> Result<Issue>;
-    async fn body(&self, repo_path: &Path, number: u64) -> Result<String>;
-}
-
-pub struct GhCli;
-
-#[derive(Deserialize)]
-struct GhIssue {
-    number: u64,
-    title: String,
-    labels: Vec<GhLabel>,
-    url: String,
-}
-
-#[derive(Deserialize)]
-struct GhLabel {
-    name: String,
-}
-
-impl From<GhIssue> for Issue {
-    fn from(i: GhIssue) -> Self {
-        Self {
-            number: i.number,
-            title: i.title,
-            labels: i.labels.into_iter().map(|l| l.name).collect(),
-            url: i.url,
-        }
-    }
-}
-
-#[async_trait]
-impl IssueClient for GhCli {
-    async fn list(&self, repo_path: &Path) -> Result<Vec<Issue>> {
-        let output = Command::new("gh")
-            .args([
-                "issue",
-                "list",
-                "--state",
-                "open",
-                "--limit",
-                "50",
-                "--json",
-                "number,title,labels,url",
-            ])
-            .current_dir(repo_path)
-            .output()
-            .await
-            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
-        if !output.status.success() {
-            return Err(Error::Spawn(format!(
-                "gh issue list failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            )));
-        }
-        let parsed: Vec<GhIssue> = serde_json::from_slice(&output.stdout)
-            .map_err(|e| Error::Spawn(format!("gh json: {e}")))?;
-        Ok(parsed.into_iter().map(Into::into).collect())
-    }
-
-    async fn view(&self, repo_path: &Path, number: u64) -> Result<Issue> {
-        let output = Command::new("gh")
-            .args(["issue", "view", &number.to_string()])
-            .args(["--json", "number,title,labels,url"])
-            .current_dir(repo_path)
-            .output()
-            .await
-            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
-        if !output.status.success() {
-            return Err(Error::Spawn(format!(
-                "gh issue view failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            )));
-        }
-        let parsed: GhIssue = serde_json::from_slice(&output.stdout)
-            .map_err(|e| Error::Spawn(format!("gh json: {e}")))?;
-        Ok(parsed.into())
-    }
-
-    async fn body(&self, repo_path: &Path, number: u64) -> Result<String> {
-        let output = Command::new("gh")
-            .args(["issue", "view", &number.to_string()])
-            .args(["--json", "body", "--jq", ".body"])
-            .current_dir(repo_path)
-            .output()
-            .await
-            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
-        if !output.status.success() {
-            return Err(Error::Spawn(format!(
-                "gh issue view failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            )));
-        }
-        let body = String::from_utf8_lossy(&output.stdout).trim_end().to_owned();
-        Ok(body)
-    }
 }
 
 /// Boundary trait for `git`. `GitCli` is the production impl; tests
@@ -224,14 +116,17 @@ fn run_git(repo: &Path, leading: &[&str], trailing: &[&std::ffi::OsStr]) -> Resu
 /// nor a saved `Config.spawn_prompt_template` is present. Mirrored on
 /// the frontend in `src/lib/spawn-prompt.ts` — keep them in sync.
 pub const DEFAULT_SPAWN_PROMPT: &str =
-    "Use the issue-team skill to implement issue #{issue_number} ({issue_title}).";
+    "Use the issue-team skill to implement issue #{issue_id} ({issue_title}).";
 
-/// Render a prompt template by replacing the two supported placeholders
-/// literally. Templates with no placeholders pass through unchanged so
-/// the user can opt out of interpolation entirely.
-pub fn render_prompt(template: &str, issue_number: u64, issue_title: &str) -> String {
+/// Render a prompt template by replacing the supported placeholders
+/// literally. `{issue_number}` is accepted as a back-compat alias for
+/// `{issue_id}` so custom templates saved before the multi-provider
+/// switch keep working. Templates with no placeholders pass through
+/// unchanged so the user can opt out of interpolation entirely.
+pub fn render_prompt(template: &str, issue_id: &str, issue_title: &str) -> String {
     template
-        .replace("{issue_number}", &issue_number.to_string())
+        .replace("{issue_id}", issue_id)
+        .replace("{issue_number}", issue_id)
         .replace("{issue_title}", issue_title)
 }
 
@@ -250,7 +145,7 @@ pub fn render_prompt(template: &str, issue_number: u64, issue_title: &str) -> St
 /// `render_prompt` to interpolate `{issue_number}` / `{issue_title}`.
 pub async fn spawn_issue_session(
     repo: &RepoEntry,
-    issue_number: u64,
+    issue_id: String,
     config: &Config,
     prompt_override: Option<String>,
     issue_client: Arc<dyn IssueClient>,
@@ -260,11 +155,12 @@ pub async fn spawn_issue_session(
     rows: u16,
 ) -> Result<SessionSummary> {
     let repo_path = PathBuf::from(&repo.path);
-    let issue = issue_client.view(&repo_path, issue_number).await?;
+    let issue = issue_client.view(&repo_path, &issue_id).await?;
 
-    let branch = format!("issue-{issue_number}");
+    let safe = sanitize_branch(&issue.id);
+    let branch = format!("issue-{safe}");
     let worktree_root = config.worktree_root_expanded();
-    let wt_name = format!("{}-issue-{}", repo.name, issue_number);
+    let wt_name = format!("{}-issue-{}", repo.name, safe);
     let worktree_path = worktree_root.join(&wt_name);
 
     if !git.worktree_exists(&worktree_path)? {
@@ -284,8 +180,8 @@ pub async fn spawn_issue_session(
         .as_deref()
         .or(config.spawn_prompt_template.as_deref())
         .unwrap_or(DEFAULT_SPAWN_PROMPT);
-    let prompt = render_prompt(template, issue.number, &issue.title);
-    let title = format!("#{} {}", issue.number, truncate(&issue.title, 40));
+    let prompt = render_prompt(template, &issue.id, &issue.title);
+    let title = format!("#{} {}", issue.id, truncate(&issue.title, 40));
 
     let (reply_tx, reply_rx) = oneshot::channel();
     registry
@@ -323,11 +219,12 @@ fn truncate(s: &str, max_len: usize) -> String {
 
 /// Output of the headless "Decide next task" agent. Returned to the
 /// frontend so the picker can highlight the recommendation and surface
-/// the model's one-line reasoning.
+/// the model's one-line reasoning. `id` is the same provider-agnostic
+/// string identifier carried by [`Issue`] (e.g. `"123"`, `"PROJ-7"`).
 #[derive(Clone, Debug, Type, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Decision {
-    pub number: u64,
+    pub id: String,
     pub reasoning: String,
 }
 
@@ -368,10 +265,10 @@ pub async fn decide_next_issue(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let decision = parse_decision(&stdout)?;
 
-    if !issues.iter().any(|i| i.number == decision.number) {
+    if !issues.iter().any(|i| i.id == decision.id) {
         return Err(Error::Spawn(format!(
             "model picked #{} but it is not in the open issue list",
-            decision.number
+            decision.id
         )));
     }
     Ok(decision)
@@ -385,12 +282,12 @@ fn build_decide_prompt(issues: &[Issue]) -> String {
         } else {
             format!(" (labels: {})", i.labels.join(", "))
         };
-        lines.push_str(&format!("- #{} — {}{}\n", i.number, i.title, labels));
+        lines.push_str(&format!("- #{} — {}{}\n", i.id, i.title, labels));
     }
     format!(
-        "You are picking the best GitHub issue to work on next from the list below.\n\
+        "You are picking the best issue to work on next from the list below.\n\
          Output ONLY a single JSON object — no preamble, no fenced code block, no commentary.\n\
-         Schema: {{\"number\": <issue number>, \"reasoning\": \"<one short sentence>\"}}\n\n\
+         Schema: {{\"id\": \"<issue id exactly as listed>\", \"reasoning\": \"<one short sentence>\"}}\n\n\
          Issues:\n{lines}"
     )
 }
@@ -432,11 +329,11 @@ pub async fn optimize_spawn_prompt(
 fn build_optimize_prompt(current_prompt: &str) -> String {
     format!(
         "You are improving a prompt template that will spawn a Claude Code session to implement \
-         a GitHub issue. The session runs inside this repository, so you have access to its \
-         skills, plugins, MCPs, hooks and CLAUDE.md.\n\n\
+         a tracked issue (GitHub, Jira, or Linear). The session runs inside this repository, so \
+         you have access to its skills, plugins, MCPs, hooks and CLAUDE.md.\n\n\
          Inspect what's available in this session and rewrite the template to make better use of \
          the most relevant skills (e.g. issue-team, feature-dev), tools, or MCPs you find. \
-         Preserve the literal placeholders `{{issue_number}}` and `{{issue_title}}` somewhere in \
+         Preserve the literal placeholders `{{issue_id}}` and `{{issue_title}}` somewhere in \
          the output so they can be interpolated at spawn time. Keep the result a single \
          template string — do not split it into multiple instructions or steps.\n\n\
          Output ONLY a single JSON object — no preamble, no fenced code block, no commentary.\n\
@@ -511,24 +408,32 @@ mod decide_tests {
     use super::*;
 
     #[test]
-    fn parses_raw_json() {
-        let d = parse_decision(r#"{"number": 12, "reasoning": "small + isolated"}"#).unwrap();
-        assert_eq!(d.number, 12);
+    fn parses_raw_json_numeric_id() {
+        let d = parse_decision(r#"{"id": "12", "reasoning": "small + isolated"}"#).unwrap();
+        assert_eq!(d.id, "12");
         assert_eq!(d.reasoning, "small + isolated");
     }
 
     #[test]
+    fn parses_jira_key_id() {
+        let d = parse_decision(r#"{"id": "PROJ-7", "reasoning": "unblocks the auth release"}"#)
+            .unwrap();
+        assert_eq!(d.id, "PROJ-7");
+    }
+
+    #[test]
     fn parses_json_inside_code_fence() {
-        let raw = "```json\n{\"number\": 5, \"reasoning\": \"oldest open\"}\n```";
+        let raw = "```json\n{\"id\": \"5\", \"reasoning\": \"oldest open\"}\n```";
         let d = parse_decision(raw).unwrap();
-        assert_eq!(d.number, 5);
+        assert_eq!(d.id, "5");
     }
 
     #[test]
     fn parses_json_with_chatter() {
-        let raw = "Sure! Here's my pick:\n{\"number\": 42, \"reasoning\": \"unblocks others\"}\nLet me know.";
+        let raw =
+            "Sure! Here's my pick:\n{\"id\": \"42\", \"reasoning\": \"unblocks others\"}\nLet me know.";
         let d = parse_decision(raw).unwrap();
-        assert_eq!(d.number, 42);
+        assert_eq!(d.id, "42");
     }
 
     #[test]

@@ -5,16 +5,22 @@ import type { Issue } from "../types";
 import { type PromptDraft, usePromptDraft } from "../use-prompt-draft";
 
 const ISSUE_A: Issue = {
-  number: 7,
+  id: "7",
   title: "Add tab strip",
   labels: ["feat"],
   url: "https://example.invalid/7",
 };
 const ISSUE_B: Issue = {
-  number: 9,
+  id: "9",
   title: "Bug fix",
   labels: [],
   url: "https://example.invalid/9",
+};
+const ISSUE_JIRA: Issue = {
+  id: "PROJ-42",
+  title: "Auth refactor",
+  labels: [],
+  url: "https://acme.atlassian.net/browse/PROJ-42",
 };
 
 function configResult(template: string | null) {
@@ -74,7 +80,7 @@ describe("usePromptDraft", () => {
     const { rerender } = render(<Host highlighted={ISSUE_A} cap={cap} />);
     await waitFor(() => expect(cap.draft).not.toBeNull());
 
-    cap.draft!.setOverride(ISSUE_A.number, "Custom for {issue_title}");
+    cap.draft!.setOverride(ISSUE_A.id, "Custom for {issue_title}");
     await waitFor(() => expect(cap.draft?.resolvedPrompt).toBe("Custom for Add tab strip"));
     expect(cap.draft?.isDirty).toBe(true);
     expect(cap.draft?.getOverrideFor(ISSUE_A)).toBe("Custom for Add tab strip");
@@ -99,9 +105,20 @@ describe("usePromptDraft", () => {
     const cap: Captured = { draft: null };
     render(<Host highlighted={ISSUE_A} cap={cap} />);
     await waitFor(() => expect(cap.draft).not.toBeNull());
-    cap.draft!.setOverride(ISSUE_A.number, "custom");
+    cap.draft!.setOverride(ISSUE_A.id, "custom");
     await waitFor(() => expect(cap.draft?.isDirty).toBe(true));
-    cap.draft!.reset(ISSUE_A.number);
+    cap.draft!.reset(ISSUE_A.id);
     await waitFor(() => expect(cap.draft?.isDirty).toBe(false));
+  });
+
+  it("renders Jira-style string ids verbatim, including in the legacy {issue_number} alias", async () => {
+    mockCommands({
+      get_config: () => configResult("Implement {issue_title} (#{issue_number})"),
+    });
+    const cap: Captured = { draft: null };
+    render(<Host highlighted={ISSUE_JIRA} cap={cap} />);
+    await waitFor(() =>
+      expect(cap.draft?.resolvedPrompt).toBe("Implement Auth refactor (#PROJ-42)"),
+    );
   });
 });

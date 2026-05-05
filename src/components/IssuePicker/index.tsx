@@ -34,7 +34,7 @@ export function IssuePicker() {
 function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
   const { repos, reposError, selectedRepo, setSelectedRepo } = usePickerRepos(prefilledRepo);
   const [issues, setIssues] = useIssuesList(selectedRepo);
-  const [spawning, setSpawning] = useState<number | null>(null);
+  const [spawning, setSpawning] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeLabels, setActiveLabels] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -49,7 +49,7 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
   const filteredIssues = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allIssues.filter((i) => {
-      if (q && !`#${i.number} ${i.title}`.toLowerCase().includes(q)) return false;
+      if (q && !`#${i.id} ${i.title}`.toLowerCase().includes(q)) return false;
       for (const l of activeLabels) if (!i.labels.includes(l)) return false;
       return true;
     });
@@ -69,12 +69,12 @@ function IssuePickerInner({ prefilledRepo }: { prefilledRepo: string | null }) {
   const onSpawn = useCallback(
     async (issue: Issue) => {
       if (!selectedRepo || spawning !== null) return;
-      setSpawning(issue.number);
+      setSpawning(issue.id);
       // Pass the rendered override only when this issue has one — otherwise
       // the backend resolves saved-template → default on its own.
       const result = await commands.spawnIssueSession(
         selectedRepo,
-        issue.number,
+        issue.id,
         DEFAULT_PTY_COLS,
         DEFAULT_PTY_ROWS,
         promptDraft.getOverrideFor(issue),

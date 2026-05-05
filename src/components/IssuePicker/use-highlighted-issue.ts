@@ -23,7 +23,7 @@ export function useHighlightedIssue(
     if (filteredIssues.length === 0 || !listRef.current) return;
     const target = filteredIssues[highlightedIndex];
     if (!target) return;
-    const el = listRef.current.querySelector(`[data-issue-number="${target.number}"]`);
+    const el = listRef.current.querySelector(`[data-issue-id="${CSS.escape(target.id)}"]`);
     if (el && "scrollIntoView" in el) {
       (el as HTMLElement).scrollIntoView({ block: "nearest" });
     }

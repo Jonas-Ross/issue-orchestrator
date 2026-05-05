@@ -31,10 +31,8 @@ export function IssuePromptPreview({ issue, draft }: { issue: Issue | null; draf
               rows={4}
               spellcheck={false}
               autoFocus
-              value={draft.templateFor(issue.number)}
-              onInput={(e) =>
-                draft.setOverride(issue.number, (e.target as HTMLTextAreaElement).value)
-              }
+              value={draft.templateFor(issue.id)}
+              onInput={(e) => draft.setOverride(issue.id, (e.target as HTMLTextAreaElement).value)}
               onBlur={() => setEditing(false)}
             />
           ) : (
@@ -49,7 +47,7 @@ export function IssuePromptPreview({ issue, draft }: { issue: Issue | null; draf
               class="prompt-btn"
               disabled={!draft.isDirty}
               onClick={() => {
-                draft.reset(issue.number);
+                draft.reset(issue.id);
                 setEditing(false);
               }}
             >

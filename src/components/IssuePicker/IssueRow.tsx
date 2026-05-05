@@ -10,7 +10,7 @@ interface Props {
   isExpanded: boolean;
   isAiPick: boolean;
   recommendation: Decision | null;
-  spawning: number | null;
+  spawning: string | null;
   body: IssueBody | undefined;
   onSpawn: (issue: Issue) => void;
   onToggleExpand: (issue: Issue) => void;
@@ -34,10 +34,31 @@ function showContextMenu(e: MouseEvent, issue: Issue) {
       { label: "Copy issue link", action: () => void copyToClipboard(issue.url) },
       {
         label: "Copy branch name",
-        action: () => void copyToClipboard(`issue-${issue.number}`),
+        action: () => void copyToClipboard(`issue-${branchSafe(issue.id)}`),
       },
     ],
   });
+}
+
+/// Mirrors the Rust `sanitize_branch` helper so the "Copy branch name"
+/// context-menu action lines up with what the spawn flow actually
+/// computes. Lowercase, keep `[a-z0-9._-]`, collapse `-` runs, trim.
+function branchSafe(id: string): string {
+  let out = "";
+  let lastDash = false;
+  for (const ch of id.toLowerCase()) {
+    const isDash = ch === "-";
+    const keep = /[a-z0-9._-]/.test(ch) && !isDash;
+    if (keep) {
+      out += ch;
+      lastDash = false;
+    } else if (!lastDash) {
+      out += "-";
+      lastDash = true;
+    }
+  }
+  const trimmed = out.replace(/^-+|-+$/g, "");
+  return trimmed.length === 0 ? "issue" : trimmed;
 }
 
 export function IssueRow({
@@ -53,7 +74,7 @@ export function IssueRow({
   onToggleExpand,
   onHighlight,
 }: Props) {
-  const isSpawning = spawning === issue.number;
+  const isSpawning = spawning === issue.id;
   return (
     <li
       class={
@@ -62,7 +83,7 @@ export function IssueRow({
         (isAiPick ? " ai-pick" : "") +
         (isHighlighted ? " highlighted" : "")
       }
-      data-issue-number={issue.number}
+      data-issue-id={issue.id}
       style={{ gridTemplateColumns: "auto auto 1fr auto auto" }}
       onClick={() => onSpawn(issue)}
       onContextMenu={(e) => showContextMenu(e, issue)}
@@ -82,14 +103,14 @@ export function IssueRow({
       <a
         class="issue-number"
         href={issue.url}
-        title="Open on GitHub"
+        title="Open issue"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           void open(issue.url);
         }}
       >
-        #{issue.number}
+        #{issue.id}
       </a>
       <span class="issue-title">{issue.title}</span>
       <span class="issue-labels">

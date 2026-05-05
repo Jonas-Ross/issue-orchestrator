@@ -20,7 +20,7 @@ export function useIssueRecommendation(
   // Scroll the AI-picked issue into view once it's resolved.
   useEffect(() => {
     if (!recommendation || !listRef.current) return;
-    const el = listRef.current.querySelector(`[data-issue-number="${recommendation.number}"]`);
+    const el = listRef.current.querySelector(`[data-issue-id="${CSS.escape(recommendation.id)}"]`);
     if (el && "scrollIntoView" in el) {
       (el as HTMLElement).scrollIntoView({ block: "nearest", behavior: "smooth" });
     }

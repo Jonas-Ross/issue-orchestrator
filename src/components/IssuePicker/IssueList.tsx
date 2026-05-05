@@ -6,10 +6,10 @@ interface Props {
   listRef: Ref<HTMLUListElement>;
   issues: Issue[];
   highlightedIndex: number;
-  expanded: number | null;
+  expanded: string | null;
   recommendation: Decision | null;
-  spawning: number | null;
-  bodies: Map<number, IssueBody>;
+  spawning: string | null;
+  bodies: Map<string, IssueBody>;
   onSpawn: (issue: Issue) => void;
   onToggleExpand: (issue: Issue) => void;
   onHighlight: (index: number) => void;
@@ -36,15 +36,15 @@ export function IssueList({
       )}
       {issues.map((issue, idx) => (
         <IssueRow
-          key={issue.number}
+          key={issue.id}
           issue={issue}
           index={idx}
           isHighlighted={idx === highlightedIndex}
-          isExpanded={expanded === issue.number}
-          isAiPick={recommendation?.number === issue.number}
+          isExpanded={expanded === issue.id}
+          isAiPick={recommendation?.id === issue.id}
           recommendation={recommendation}
           spawning={spawning}
-          body={bodies.get(issue.number)}
+          body={bodies.get(issue.id)}
           onSpawn={onSpawn}
           onToggleExpand={onToggleExpand}
           onHighlight={onHighlight}

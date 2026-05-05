@@ -27,7 +27,7 @@ export function IssuePickerToolbar({
         ref={searchRefAttach}
         type="text"
         class="issue-search"
-        placeholder="Search by title or #number"
+        placeholder="Search by title or #id"
         value={search}
         onInput={(e) => setSearch((e.target as HTMLInputElement).value)}
       />
@@ -46,7 +46,7 @@ export function IssuePickerToolbar({
       )}
       {recommendation && (
         <p class="hint" style={{ margin: 0 }}>
-          AI recommends <strong>#{recommendation.number}</strong> — {recommendation.reasoning}
+          AI recommends <strong>#{recommendation.id}</strong> — {recommendation.reasoning}
         </p>
       )}
       {recoError && (

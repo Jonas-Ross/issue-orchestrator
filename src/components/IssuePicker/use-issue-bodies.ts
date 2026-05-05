@@ -3,21 +3,21 @@ import { commands } from "../../lib/bindings";
 import type { Issue, IssueBody } from "./types";
 
 export function useIssueBodies(selectedRepo: string | null) {
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const [bodies, setBodies] = useState<Map<number, IssueBody>>(new Map());
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [bodies, setBodies] = useState<Map<string, IssueBody>>(new Map());
 
   const toggleExpand = async (issue: Issue) => {
-    if (expanded === issue.number) {
+    if (expanded === issue.id) {
       setExpanded(null);
       return;
     }
-    setExpanded(issue.number);
-    if (!selectedRepo || bodies.has(issue.number)) return;
-    setBodies((prev) => new Map(prev).set(issue.number, "loading"));
-    const result = await commands.getIssueBody(selectedRepo, issue.number);
+    setExpanded(issue.id);
+    if (!selectedRepo || bodies.has(issue.id)) return;
+    setBodies((prev) => new Map(prev).set(issue.id, "loading"));
+    const result = await commands.getIssueBody(selectedRepo, issue.id);
     setBodies((prev) =>
       new Map(prev).set(
-        issue.number,
+        issue.id,
         result.status === "error" ? { error: result.error } : result.data,
       ),
     );
