@@ -54,15 +54,15 @@ impl IssueClient for GhCli {
             .current_dir(repo_path)
             .output()
             .await
-            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
+            .map_err(|e| Error::Issues(format!("gh: {e}")))?;
         if !output.status.success() {
-            return Err(Error::Spawn(format!(
+            return Err(Error::Issues(format!(
                 "gh issue list failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
         let parsed: Vec<GhIssue> = serde_json::from_slice(&output.stdout)
-            .map_err(|e| Error::Spawn(format!("gh json: {e}")))?;
+            .map_err(|e| Error::Issues(format!("gh json: {e}")))?;
         Ok(parsed.into_iter().map(Into::into).collect())
     }
 
@@ -73,15 +73,15 @@ impl IssueClient for GhCli {
             .current_dir(repo_path)
             .output()
             .await
-            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
+            .map_err(|e| Error::Issues(format!("gh: {e}")))?;
         if !output.status.success() {
-            return Err(Error::Spawn(format!(
+            return Err(Error::Issues(format!(
                 "gh issue view failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
         let parsed: GhIssue = serde_json::from_slice(&output.stdout)
-            .map_err(|e| Error::Spawn(format!("gh json: {e}")))?;
+            .map_err(|e| Error::Issues(format!("gh json: {e}")))?;
         Ok(parsed.into())
     }
 
@@ -92,9 +92,9 @@ impl IssueClient for GhCli {
             .current_dir(repo_path)
             .output()
             .await
-            .map_err(|e| Error::Spawn(format!("gh: {e}")))?;
+            .map_err(|e| Error::Issues(format!("gh: {e}")))?;
         if !output.status.success() {
-            return Err(Error::Spawn(format!(
+            return Err(Error::Issues(format!(
                 "gh issue view failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             )));

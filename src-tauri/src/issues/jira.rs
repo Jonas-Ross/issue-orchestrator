@@ -61,11 +61,11 @@ impl JiraClient {
             .query(query)
             .send()
             .await
-            .map_err(|e| Error::Spawn(format!("jira: {e}")))?;
+            .map_err(|e| Error::Http(format!("jira: {e}")))?;
         let resp = check_http_response(resp, ctx).await?;
         resp.json()
             .await
-            .map_err(|e| Error::Spawn(format!("jira json: {e}")))
+            .map_err(|e| Error::Http(format!("jira json: {e}")))
     }
 }
 

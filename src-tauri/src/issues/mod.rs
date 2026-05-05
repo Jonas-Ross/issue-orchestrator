@@ -46,7 +46,7 @@ pub trait IssueClient: Send + Sync {
     async fn body(&self, repo_path: &Path, id: &str) -> Result<String>;
 }
 
-/// Surface non-2xx HTTP responses as `Error::Spawn` with a short body
+/// Surface non-2xx HTTP responses as `Error::Http` with a short body
 /// snippet for diagnostics. Used by the Jira and Linear clients.
 pub async fn check_http_response(
     resp: reqwest::Response,
@@ -57,7 +57,7 @@ pub async fn check_http_response(
     }
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
-    Err(crate::error::Error::Spawn(format!(
+    Err(crate::error::Error::Http(format!(
         "{ctx}: HTTP {status}: {}",
         body.chars().take(200).collect::<String>()
     )))

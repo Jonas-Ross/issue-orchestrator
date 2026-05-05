@@ -30,7 +30,7 @@ pub async fn decide_next_issue(
     let repo_path = PathBuf::from(&repo.path);
     let issues = issue_client.list(&repo_path).await?;
     if issues.is_empty() {
-        return Err(Error::Spawn("no open issues to choose from".into()));
+        return Err(Error::ClaudeCli("no open issues to choose from".into()));
     }
 
     let prompt = build_decide_prompt(&issues);
@@ -38,7 +38,7 @@ pub async fn decide_next_issue(
     let decision = parse_decision(&stdout)?;
 
     if !issues.iter().any(|i| i.id == decision.id) {
-        return Err(Error::Spawn(format!(
+        return Err(Error::ClaudeCli(format!(
             "model picked #{} but it is not in the open issue list",
             decision.id
         )));
@@ -105,11 +105,11 @@ async fn run_claude_p(repo_path: &std::path::Path, prompt: &str) -> Result<Strin
             .output(),
     )
     .await
-    .map_err(|_| Error::Spawn("claude -p timed out after 60s".into()))?
-    .map_err(|e| Error::Spawn(format!("claude: {e}")))?;
+    .map_err(|_| Error::ClaudeCli("claude -p timed out after 60s".into()))?
+    .map_err(|e| Error::ClaudeCli(format!("claude: {e}")))?;
 
     if !output.status.success() {
-        return Err(Error::Spawn(format!(
+        return Err(Error::ClaudeCli(format!(
             "claude -p failed: {}",
             String::from_utf8_lossy(&output.stderr)
         )));
@@ -127,11 +127,12 @@ pub fn parse_optimized_prompt(raw: &str) -> Result<String> {
     let trimmed = raw.trim();
     let cleaned = strip_fence(trimmed);
     let json_str = extract_first_object(cleaned)
-        .ok_or_else(|| Error::Spawn(format!("no JSON object in claude output: {raw}")))?;
-    let parsed: OptimizedPrompt = serde_json::from_str(json_str)
-        .map_err(|e| Error::Spawn(format!("parse optimized prompt json: {e} (input: {json_str})")))?;
+        .ok_or_else(|| Error::ClaudeCli(format!("no JSON object in claude output: {raw}")))?;
+    let parsed: OptimizedPrompt = serde_json::from_str(json_str).map_err(|e| {
+        Error::ClaudeCli(format!("parse optimized prompt json: {e} (input: {json_str})"))
+    })?;
     if parsed.prompt.trim().is_empty() {
-        return Err(Error::Spawn("model returned empty prompt".into()));
+        return Err(Error::ClaudeCli("model returned empty prompt".into()));
     }
     Ok(parsed.prompt)
 }
@@ -143,9 +144,9 @@ pub fn parse_decision(raw: &str) -> Result<Decision> {
     let trimmed = raw.trim();
     let cleaned = strip_fence(trimmed);
     let json_str = extract_first_object(cleaned)
-        .ok_or_else(|| Error::Spawn(format!("no JSON object in claude output: {raw}")))?;
+        .ok_or_else(|| Error::ClaudeCli(format!("no JSON object in claude output: {raw}")))?;
     serde_json::from_str::<Decision>(json_str)
-        .map_err(|e| Error::Spawn(format!("parse decision json: {e} (input: {json_str})")))
+        .map_err(|e| Error::ClaudeCli(format!("parse decision json: {e} (input: {json_str})")))
 }
 
 fn strip_fence(s: &str) -> &str {

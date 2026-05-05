@@ -109,22 +109,22 @@ impl LinearClient {
             .json(&json!({ "query": query, "variables": variables }))
             .send()
             .await
-            .map_err(|e| Error::Spawn(format!("linear: {e}")))?;
+            .map_err(|e| Error::Http(format!("linear: {e}")))?;
         let resp = check_http_response(resp, &format!("linear {ctx}")).await?;
         let env: GqlEnvelope<T> = resp
             .json()
             .await
-            .map_err(|e| Error::Spawn(format!("linear json: {e}")))?;
+            .map_err(|e| Error::Http(format!("linear json: {e}")))?;
         if let Some(errs) = env.errors.filter(|e| !e.is_empty()) {
             let joined = errs
                 .into_iter()
                 .map(|e| e.message)
                 .collect::<Vec<_>>()
                 .join("; ");
-            return Err(Error::Spawn(format!("linear {ctx}: {joined}")));
+            return Err(Error::Http(format!("linear {ctx}: {joined}")));
         }
         env.data
-            .ok_or_else(|| Error::Spawn(format!("linear {ctx}: empty data")))
+            .ok_or_else(|| Error::Http(format!("linear {ctx}: empty data")))
     }
 }
 

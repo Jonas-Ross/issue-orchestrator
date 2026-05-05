@@ -47,7 +47,7 @@ impl GitRunner for GitCli {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .map_err(|e| Error::Spawn(format!("git: {e}")))?;
+            .map_err(|e| Error::Git(format!("git: {e}")))?;
         Ok(status.success())
     }
 
@@ -85,9 +85,9 @@ fn run_git(repo: &Path, leading: &[&str], trailing: &[&std::ffi::OsStr]) -> Resu
     }
     let out = cmd
         .output()
-        .map_err(|e| Error::Spawn(format!("git: {e}")))?;
+        .map_err(|e| Error::Git(format!("git: {e}")))?;
     if !out.status.success() {
-        return Err(Error::Spawn(format!(
+        return Err(Error::Git(format!(
             "git {leading:?} failed: {}",
             String::from_utf8_lossy(&out.stderr)
         )));
