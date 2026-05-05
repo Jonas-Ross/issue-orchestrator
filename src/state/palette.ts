@@ -15,5 +15,4 @@ export function createPaletteState() {
 }
 
 export const paletteState = createPaletteState();
-export const { paletteOpen, openPalette, closePalette, togglePalette } =
-  paletteState;
+export const { paletteOpen, openPalette, closePalette, togglePalette } = paletteState;

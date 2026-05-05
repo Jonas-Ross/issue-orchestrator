@@ -22,5 +22,4 @@ export function createContextMenuState() {
 }
 
 export const contextMenuStore = createContextMenuState();
-export const { contextMenu, openContextMenu, closeContextMenu } =
-  contextMenuStore;
+export const { contextMenu, openContextMenu, closeContextMenu } = contextMenuStore;

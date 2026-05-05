@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "rules": {
+    "max-lines": ["error", { "max": 250, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": [
+      "error",
+      { "max": 150, "skipBlankLines": true, "skipComments": true, "IIFEs": true }
+    ],
+    "max-depth": ["error", 4],
+    "max-params": ["error", 4],
+    "complexity": ["error", 18],
+    "max-nested-callbacks": ["error", 4],
+    "no-console": ["error", { "allow": ["warn", "error"] }],
+    "no-debugger": "error",
+    "no-nested-ternary": "error",
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "import/no-unassigned-import": "off",
+    "import/no-named-as-default": "off",
+    "react/react-in-jsx-scope": "off"
+  },
+  "ignorePatterns": ["src/lib/bindings.ts", "dist", "coverage", "node_modules", "src-tauri"],
+  "overrides": [
+    {
+      "files": ["**/__tests__/**", "**/*.test.{ts,tsx}", "src/test/**"],
+      "rules": {
+        "max-lines": ["error", { "max": 400 }],
+        "max-lines-per-function": "off",
+        "max-nested-callbacks": "off"
+      }
+    }
+  ]
+}

@@ -88,11 +88,7 @@ export function AddRepoButton({ variant = "tile", onAdded }: Props) {
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            class="add-repo-paste-toggle"
-            onClick={() => setPasting(true)}
-          >
+          <button type="button" class="add-repo-paste-toggle" onClick={() => setPasting(true)}>
             Paste path
           </button>
         ))}

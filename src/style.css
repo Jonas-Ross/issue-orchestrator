@@ -20,7 +20,9 @@ a {
   color: var(--accent);
   text-decoration: none;
   border-bottom: 1px solid transparent;
-  transition: color 80ms ease, border-color 80ms ease;
+  transition:
+    color 80ms ease,
+    border-color 80ms ease;
   cursor: pointer;
 }
 a:hover {
@@ -43,24 +45,50 @@ select:focus-visible {
 
 /* ── Keyframes ───────────────────────────────────────────────────────── */
 @keyframes io-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 @keyframes io-pulse-ring {
-  0%   { transform: scale(1);   opacity: 0.55; }
-  100% { transform: scale(2.6); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
 }
 @keyframes io-pulse-row {
-  0%, 100% { background-color: var(--status-needs-bg); }
-  50%      { background-color: var(--status-needs-bg-strong); }
+  0%,
+  100% {
+    background-color: var(--status-needs-bg);
+  }
+  50% {
+    background-color: var(--status-needs-bg-strong);
+  }
 }
 @keyframes io-fade-up {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes io-shimmer {
-  0%   { background-position: -200px 0; }
-  100% { background-position:  200px 0; }
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
 }
 
 /* ── Layout ──────────────────────────────────────────────────────────── */
@@ -461,11 +489,21 @@ select:focus-visible {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.status-dot-running   { background: var(--status-running); }
-.status-dot-needs_input { background: var(--status-needs); }
-.status-dot-idle      { background: var(--status-idle); }
-.status-dot-exited    { background: var(--status-exited); }
-.status-dot-spawning  { background: var(--status-spawning); }
+.status-dot-running {
+  background: var(--status-running);
+}
+.status-dot-needs_input {
+  background: var(--status-needs);
+}
+.status-dot-idle {
+  background: var(--status-idle);
+}
+.status-dot-exited {
+  background: var(--status-exited);
+}
+.status-dot-spawning {
+  background: var(--status-spawning);
+}
 .status-dot.pulse {
   animation: io-pulse var(--dur-breath) ease-in-out infinite;
 }
@@ -477,11 +515,21 @@ select:focus-visible {
   opacity: 0.55;
   animation: io-pulse-ring var(--dur-breath) ease-out infinite;
 }
-.status-dot-needs_input .status-dot-ring { background: var(--status-needs); }
-.status-dot-running   .status-dot-ring { background: var(--status-running); }
-.status-dot-idle      .status-dot-ring { background: var(--status-idle); }
-.status-dot-exited    .status-dot-ring { background: var(--status-exited); }
-.status-dot-spawning  .status-dot-ring { background: var(--status-spawning); }
+.status-dot-needs_input .status-dot-ring {
+  background: var(--status-needs);
+}
+.status-dot-running .status-dot-ring {
+  background: var(--status-running);
+}
+.status-dot-idle .status-dot-ring {
+  background: var(--status-idle);
+}
+.status-dot-exited .status-dot-ring {
+  background: var(--status-exited);
+}
+.status-dot-spawning .status-dot-ring {
+  background: var(--status-spawning);
+}
 
 /* ── Kbd hint chip ───────────────────────────────────────────────────── */
 .kbd {
@@ -1405,7 +1453,8 @@ a.issue-number:hover {
   font-family: inherit;
   font-size: 12.5px;
   text-align: left;
-  transition: background var(--dur-micro) var(--ease-out),
+  transition:
+    background var(--dur-micro) var(--ease-out),
     color var(--dur-micro) var(--ease-out);
 }
 .settings-nav-item:hover {
@@ -1527,7 +1576,8 @@ a.issue-number:hover {
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: background var(--dur-micro) var(--ease-out),
+  transition:
+    background var(--dur-micro) var(--ease-out),
     border-color var(--dur-micro) var(--ease-out);
 }
 .settings-toggle:hover {
@@ -1545,7 +1595,8 @@ a.issue-number:hover {
   height: 14px;
   border-radius: 50%;
   background: var(--text-2);
-  transition: transform var(--dur-micro) var(--ease-out),
+  transition:
+    transform var(--dur-micro) var(--ease-out),
     background var(--dur-micro) var(--ease-out);
 }
 .settings-toggle.on .settings-toggle-knob {

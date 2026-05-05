@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": true,
+  "singleQuote": false,
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.toml",
+    "src/lib/bindings.ts",
+    "dist/**",
+    "coverage/**",
+    "node_modules/**",
+    "src-tauri/**",
+    "plugins/**",
+    ".github/**"
+  ]
+}

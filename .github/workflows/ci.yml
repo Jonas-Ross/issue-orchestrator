@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      # mold is the fastest commonly-available linker; cuts link time on
+      # Tauri's large crate graph by ~30% compared to ld.
+      RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 25 — the test script wraps `vitest` with
+          # NODE_OPTIONS=--no-webstorage to disable the native localStorage
+          # that ships in Node 25 (see CLAUDE.md "Node 25 quirk"). That
+          # flag is allowed inside NODE_OPTIONS only on Node 25.
+          node-version: 25
+          cache: npm
+
+      # Tauri's Linux build needs GTK + webkit system libs even just to
+      # link the bindings-generator binary and the lib tests, since they
+      # share the Cargo workspace with the Tauri lib. mold is the linker
+      # used via RUSTFLAGS above.
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            build-essential \
+            mold
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # `npm install` (not `npm ci`) because vitest 4 nests vite 8 with an
+      # optional peer dep on esbuild — the lockfile generated on macOS
+      # records platform-specific esbuild binaries in a way that npm 11's
+      # strict ci check refuses on linux/x64. `npm install` honors the
+      # lockfile's pinned versions but is lenient about the platform
+      # filtering. CI determinism is preserved by the pinned versions.
+      - run: npm install --no-audit --no-fund
+
+      # Backend tests first — this compiles the Rust lib + dev-deps. The
+      # subsequent `npm run bindings` reuses those artifacts so its
+      # incremental cost is just linking the export-bindings binary.
+      - name: Backend tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+
+      # bindings.ts is gitignored and generated from the Rust IPC surface;
+      # regenerate it before lint / typecheck / test.
+      - run: npm run bindings
+
+      - run: npm run lint
+      - run: npm run fmt:check
+      - run: npx tsc --noEmit
+      - run: npm test

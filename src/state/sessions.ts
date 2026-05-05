@@ -8,9 +8,7 @@ export function createSessionsState() {
   const sessions = signal<SessionSummary[]>([]);
   const activeId = signal<string | null>(null);
 
-  const activeSession = computed(
-    () => sessions.value.find((s) => s.id === activeId.value) ?? null,
-  );
+  const activeSession = computed(() => sessions.value.find((s) => s.id === activeId.value) ?? null);
 
   /// Sessions grouped by `repoName`, with `null` repo names collected under
   /// `SHELL_BUCKET`. Used by the sidebar to render per-repo drawers.
@@ -39,9 +37,7 @@ export function createSessionsState() {
   }
 
   function setStatus(id: string, status: Status) {
-    sessions.value = sessions.value.map((s) =>
-      s.id === id ? { ...s, status } : s,
-    );
+    sessions.value = sessions.value.map((s) => (s.id === id ? { ...s, status } : s));
   }
 
   return {

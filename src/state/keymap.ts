@@ -1,5 +1,6 @@
 import { useEffect } from "preact/hooks";
 import { commands } from "../lib/bindings";
+import { spawnBash } from "../lib/spawn-bash";
 import { activeId, sessions } from "./sessions";
 import { closePicker, openPicker, pickerOpen } from "./picker";
 import { closePalette, paletteOpen, togglePalette } from "./palette";
@@ -55,7 +56,7 @@ export function useKeymap() {
       // Cmd+Shift+B → debug bash tab
       if (e.shiftKey && e.key.toLowerCase() === "b") {
         return handle(() => {
-          void commands.ptySpawn(80, 24);
+          void spawnBash();
         });
       }
 

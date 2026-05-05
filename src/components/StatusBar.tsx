@@ -24,9 +24,7 @@ export function StatusBar() {
         </>
       )}
       <span class="status-bar-spacer" />
-      <span
-        class={"status-bar-activity" + (isNeeds ? " needs" : "")}
-      >
+      <span class={"status-bar-activity" + (isNeeds ? " needs" : "")}>
         {ACTIVITY_LABEL[s.status]}
       </span>
     </div>

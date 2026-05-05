@@ -56,15 +56,15 @@ function Step1Plugin({ onContinue }: { onContinue: () => void }) {
     <>
       <h2>Install the issue-orchestrator plugin</h2>
       <p>
-        Run these in any Claude Code session — they wire Claude's hooks
-        into the orchestrator over a Unix socket.
+        Run these in any Claude Code session — they wire Claude's hooks into the orchestrator over a
+        Unix socket.
       </p>
       <CommandRow command={MARKETPLACE_CMD} />
       <CommandRow command={INSTALL_CMD} />
       <p class="hint">
-        Then restart Claude Code (or run <code>/reload-plugins</code>) for it
-        to take effect. The plugin script silently no-ops when this app isn't
-        running, so other Claude sessions are unaffected.
+        Then restart Claude Code (or run <code>/reload-plugins</code>) for it to take effect. The
+        plugin script silently no-ops when this app isn't running, so other Claude sessions are
+        unaffected.
       </p>
       <div class="setup-actions">
         <button type="button" class="primary" onClick={onContinue}>
@@ -83,8 +83,8 @@ function CommandRow({ command }: { command: string }) {
     setTimeout(() => setStatus("idle"), 1500);
   };
 
-  const label =
-    status === "copied" ? "Copied" : status === "failed" ? "Select manually" : "Copy";
+  const LABELS = { idle: "Copy", copied: "Copied", failed: "Select manually" } as const;
+  const label = LABELS[status];
 
   return (
     <div class="snippet-row">
@@ -109,8 +109,8 @@ function Step2Repo({
     <>
       <h2>Add your first repo</h2>
       <p>
-        Pick the folder of a Git repository you want to drive issue-team
-        sessions in. You can add more later from the sidebar.
+        Pick the folder of a Git repository you want to drive issue-team sessions in. You can add
+        more later from the sidebar.
       </p>
       <AddRepoButton variant="primary" />
       <div class="setup-actions">

@@ -35,10 +35,7 @@ export function createSettingsStore(storage: Storage = localStorage) {
     }
   });
 
-  function updateSetting<K extends keyof Settings>(
-    key: K,
-    value: Settings[K],
-  ) {
+  function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
     settings.value = { ...settings.value, [key]: value };
   }
 
@@ -60,10 +57,5 @@ export function createSettingsStore(storage: Storage = localStorage) {
 }
 
 export const settingsStore = createSettingsStore();
-export const {
-  settings,
-  settingsPanelOpen,
-  updateSetting,
-  openSettings,
-  closeSettings,
-} = settingsStore;
+export const { settings, settingsPanelOpen, updateSetting, openSettings, closeSettings } =
+  settingsStore;

@@ -1,4 +1,4 @@
-import { commands } from "../lib/bindings";
+import { spawnBash } from "../lib/spawn-bash";
 import { sessions, sessionsByRepo, SHELL_BUCKET } from "../state/sessions";
 import { repos } from "../state/repos";
 import { sidebarCollapsed, toggleSidebar } from "../state/sidebar";
@@ -7,13 +7,6 @@ import { SidebarRow } from "./SidebarRow";
 import { RepoDrawer } from "./RepoDrawer";
 import { AddRepoButton } from "./AddRepoButton";
 import { StatusDot } from "./StatusDot";
-
-async function spawnBash() {
-  const result = await commands.ptySpawn(80, 24);
-  if (result.status === "error") {
-    console.error("ptySpawn failed:", result.error);
-  }
-}
 
 export function Sidebar() {
   const collapsed = sidebarCollapsed.value;
@@ -103,11 +96,7 @@ export function Sidebar() {
         ) : (
           <>
             {repoList.map((r) => (
-              <RepoDrawer
-                key={r.name}
-                repo={r}
-                sessions={grouped.get(r.name) ?? []}
-              />
+              <RepoDrawer key={r.name} repo={r} sessions={grouped.get(r.name) ?? []} />
             ))}
 
             {shellSessions.length > 0 && (
