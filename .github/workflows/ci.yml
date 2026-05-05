@@ -16,6 +16,21 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Tauri's Linux build needs GTK + webkit system libs even just to
+      # link the bindings-generator binary, since it shares the Cargo
+      # workspace with the Tauri lib.
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            build-essential
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
