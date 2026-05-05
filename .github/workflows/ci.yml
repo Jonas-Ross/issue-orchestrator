@@ -6,8 +6,12 @@ on:
     branches: [main]
 
 jobs:
-  frontend:
+  ci:
     runs-on: ubuntu-latest
+    env:
+      # mold is the fastest commonly-available linker; cuts link time on
+      # Tauri's large crate graph by ~30% compared to ld.
+      RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
     steps:
       - uses: actions/checkout@v4
 
@@ -21,9 +25,10 @@ jobs:
           cache: npm
 
       # Tauri's Linux build needs GTK + webkit system libs even just to
-      # link the bindings-generator binary, since it shares the Cargo
-      # workspace with the Tauri lib.
-      - name: Install Tauri system deps
+      # link the bindings-generator binary and the lib tests, since they
+      # share the Cargo workspace with the Tauri lib. mold is the linker
+      # used via RUSTFLAGS above.
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -33,7 +38,8 @@ jobs:
             libssl-dev \
             libglib2.0-dev \
             libgtk-3-dev \
-            build-essential
+            build-essential \
+            mold
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -48,6 +54,12 @@ jobs:
       # lockfile's pinned versions but is lenient about the platform
       # filtering. CI determinism is preserved by the pinned versions.
       - run: npm install --no-audit --no-fund
+
+      # Backend tests first — this compiles the Rust lib + dev-deps. The
+      # subsequent `npm run bindings` reuses those artifacts so its
+      # incremental cost is just linking the export-bindings binary.
+      - name: Backend tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 
       # bindings.ts is gitignored and generated from the Rust IPC surface;
       # regenerate it before lint / typecheck / test.
