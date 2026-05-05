@@ -10,42 +10,15 @@ interface Props {
   repo: RepoEntry;
 }
 
-interface DraftState {
-  kind: ProviderKind;
-  baseUrl: string;
-  email: string;
-  projectKey: string;
-  teamKey: string;
-}
-
-function draftFromProvider(p: IssueProvider | undefined): DraftState {
-  if (!p || p.kind === "github") {
-    return { kind: "github", baseUrl: "", email: "", projectKey: "", teamKey: "" };
+function emptyDraft(kind: ProviderKind): IssueProvider {
+  switch (kind) {
+    case "github":
+      return { kind: "github" };
+    case "jira":
+      return { kind: "jira", baseUrl: "", email: "", projectKey: "" };
+    case "linear":
+      return { kind: "linear", teamKey: "" };
   }
-  if (p.kind === "jira") {
-    return {
-      kind: "jira",
-      baseUrl: p.baseUrl,
-      email: p.email,
-      projectKey: p.projectKey,
-      teamKey: "",
-    };
-  }
-  return {
-    kind: "linear",
-    baseUrl: "",
-    email: "",
-    projectKey: "",
-    teamKey: p.teamKey,
-  };
-}
-
-function buildProvider(d: DraftState): IssueProvider {
-  if (d.kind === "github") return { kind: "github" };
-  if (d.kind === "jira") {
-    return { kind: "jira", baseUrl: d.baseUrl, email: d.email, projectKey: d.projectKey };
-  }
-  return { kind: "linear", teamKey: d.teamKey };
 }
 
 function summary(p: IssueProvider | undefined): string {
@@ -73,16 +46,15 @@ export function RepoProviderSettings({ repo }: Props) {
 }
 
 function RepoProviderEditor({ repo, onClose }: { repo: RepoEntry; onClose: () => void }) {
-  const [draft, setDraft] = useState<DraftState>(() => draftFromProvider(repo.provider));
+  const [draft, setDraft] = useState<IssueProvider>(() => repo.provider ?? { kind: "github" });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const provider = buildProvider(draft);
 
   const onSave = async () => {
     if (saving) return;
     setSaving(true);
     setError(null);
-    const result = await commands.updateRepoProvider(repo.name, provider);
+    const result = await commands.updateRepoProvider(repo.name, draft);
     setSaving(false);
     if (result.status === "error") {
       setError(result.error);
@@ -100,7 +72,7 @@ function RepoProviderEditor({ repo, onClose }: { repo: RepoEntry; onClose: () =>
           class="prompt-repo-select"
           value={draft.kind}
           onChange={(e) =>
-            setDraft({ ...draft, kind: (e.target as HTMLSelectElement).value as ProviderKind })
+            setDraft(emptyDraft((e.target as HTMLSelectElement).value as ProviderKind))
           }
         >
           <option value="github">GitHub</option>
@@ -132,8 +104,8 @@ function ProviderFields({
   draft,
   setDraft,
 }: {
-  draft: DraftState;
-  setDraft: (d: DraftState) => void;
+  draft: IssueProvider;
+  setDraft: (d: IssueProvider) => void;
 }) {
   if (draft.kind === "github") {
     return (

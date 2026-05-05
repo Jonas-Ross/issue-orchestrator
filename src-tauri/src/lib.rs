@@ -104,6 +104,7 @@ pub fn run() {
                 config_path: config_path.clone(),
                 config: Mutex::new(config.clone()),
                 git_runner: Arc::new(spawn::GitCli),
+                http: reqwest::Client::new(),
             });
 
             Ok(())

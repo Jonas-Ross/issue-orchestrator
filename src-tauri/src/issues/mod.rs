@@ -46,6 +46,23 @@ pub trait IssueClient: Send + Sync {
     async fn body(&self, repo_path: &Path, id: &str) -> Result<String>;
 }
 
+/// Surface non-2xx HTTP responses as `Error::Spawn` with a short body
+/// snippet for diagnostics. Used by the Jira and Linear clients.
+pub async fn check_http_response(
+    resp: reqwest::Response,
+    ctx: &str,
+) -> Result<reqwest::Response> {
+    if resp.status().is_success() {
+        return Ok(resp);
+    }
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    Err(crate::error::Error::Spawn(format!(
+        "{ctx}: HTTP {status}: {}",
+        body.chars().take(200).collect::<String>()
+    )))
+}
+
 /// Make a string safe for use as a git branch / worktree directory name.
 /// Lowercases (so `PROJ-12` doesn't collide with `proj-12` on macOS's
 /// default case-insensitive APFS volume), keeps `[a-z0-9._-]`, and

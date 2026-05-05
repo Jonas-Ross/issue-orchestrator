@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
 use crate::config::{Config, IssueProvider, RepoEntry};
+use crate::issues::secrets::ProviderSecretKind;
 use crate::issues::{self, secrets};
 use crate::registry::{RegistryCmd, RegistryEvent, SessionId, SessionSummary, SpawnSpec};
 use crate::spawn::{self, Decision, GitRunner, Issue};
@@ -22,6 +23,10 @@ pub struct AppState {
     pub config_path: PathBuf,
     pub config: Mutex<Config>,
     pub git_runner: Arc<dyn GitRunner>,
+    /// Shared HTTP client. `reqwest::Client::new()` allocates a fresh
+    /// connection pool and rustls context, so we build it once at app
+    /// start and clone the cheap handle into each Jira/Linear client.
+    pub http: reqwest::Client,
 }
 
 /// Bridge: drains domain events from the actor and re-emits them as the
@@ -225,7 +230,7 @@ pub async fn list_issues(
     repo_name: String,
 ) -> Result<Vec<Issue>, String> {
     let repo = lookup_repo(&state, &repo_name)?;
-    let client = issues::make_client(&repo).map_err(|e| e.to_string())?;
+    let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
     let path = PathBuf::from(&repo.path);
     client.list(&path).await.map_err(Into::into)
 }
@@ -238,7 +243,7 @@ pub async fn get_issue_body(
     issue_id: String,
 ) -> Result<String, String> {
     let repo = lookup_repo(&state, &repo_name)?;
-    let client = issues::make_client(&repo).map_err(|e| e.to_string())?;
+    let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
     let path = PathBuf::from(&repo.path);
     client.body(&path, &issue_id).await.map_err(Into::into)
 }
@@ -250,7 +255,7 @@ pub async fn decide_next_issue(
     repo_name: String,
 ) -> Result<Decision, String> {
     let repo = lookup_repo(&state, &repo_name)?;
-    let client = issues::make_client(&repo).map_err(|e| e.to_string())?;
+    let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
     spawn::decide_next_issue(&repo, client)
         .await
         .map_err(Into::into)
@@ -311,17 +316,9 @@ pub async fn spawn_issue_session(
     rows: u16,
     prompt_override: Option<String>,
 ) -> Result<SessionSummary, String> {
-    let (repo, config) = {
-        let config = state.config.lock().map_err(|e| e.to_string())?;
-        let repo = config
-            .repos
-            .iter()
-            .find(|r| r.name == repo_name)
-            .cloned()
-            .ok_or_else(|| format!("unknown repo: {repo_name}"))?;
-        (repo, config.clone())
-    };
-    let client = issues::make_client(&repo).map_err(|e| e.to_string())?;
+    let repo = lookup_repo(&state, &repo_name)?;
+    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
 
     spawn::spawn_issue_session(
         &repo,
@@ -384,22 +381,28 @@ pub async fn update_repo_provider(
 #[specta::specta]
 pub fn set_provider_secret(
     repo_name: String,
-    kind: String,
+    kind: ProviderSecretKind,
     token: String,
 ) -> Result<(), String> {
-    secrets::set_token(&kind, &repo_name, &token).map_err(|e| e.to_string())
+    secrets::set_token(kind.as_str(), &repo_name, &token).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn delete_provider_secret(repo_name: String, kind: String) -> Result<(), String> {
-    secrets::delete_token(&kind, &repo_name).map_err(|e| e.to_string())
+pub fn delete_provider_secret(
+    repo_name: String,
+    kind: ProviderSecretKind,
+) -> Result<(), String> {
+    secrets::delete_token(kind.as_str(), &repo_name).map_err(|e| e.to_string())
 }
 
 /// Read-only check the settings UI uses to render "✓ Token saved" vs
 /// "Set token…". Never returns the token itself.
 #[tauri::command]
 #[specta::specta]
-pub fn provider_secret_exists(repo_name: String, kind: String) -> Result<bool, String> {
-    secrets::token_exists(&kind, &repo_name).map_err(|e| e.to_string())
+pub fn provider_secret_exists(
+    repo_name: String,
+    kind: ProviderSecretKind,
+) -> Result<bool, String> {
+    secrets::token_exists(kind.as_str(), &repo_name).map_err(|e| e.to_string())
 }

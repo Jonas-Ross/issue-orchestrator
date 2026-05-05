@@ -1,12 +1,10 @@
 import { useEffect, useState } from "preact/hooks";
 import { commands } from "../../lib/bindings";
-import type { IssueProvider } from "../../lib/bindings";
-
-type ProviderKind = IssueProvider["kind"];
+import type { ProviderSecretKind } from "../../lib/bindings";
 
 interface Props {
   repoName: string;
-  kind: ProviderKind;
+  kind: ProviderSecretKind;
 }
 
 function statusLabel(exists: boolean | null): string {
@@ -15,9 +13,6 @@ function statusLabel(exists: boolean | null): string {
   return "No token saved";
 }
 
-/// Save / clear the macOS-Keychain-backed token for one (repo, provider)
-/// pair. The token itself is never returned over IPC — `setProviderSecret`
-/// is write-only and `providerSecretExists` is the only readback.
 export function ProviderTokenControls({ repoName, kind }: Props) {
   const [exists, setExists] = useState<boolean | null>(null);
   const [draft, setDraft] = useState("");
@@ -25,12 +20,17 @@ export function ProviderTokenControls({ repoName, kind }: Props) {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setExists(null);
     setMsg(null);
     void (async () => {
       const r = await commands.providerSecretExists(repoName, kind);
+      if (cancelled) return;
       setExists(r.status === "ok" ? r.data : false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [repoName, kind]);
 
   const onSave = async () => {

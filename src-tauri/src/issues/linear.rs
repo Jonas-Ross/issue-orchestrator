@@ -10,7 +10,7 @@ use serde_json::json;
 
 use crate::error::{Error, Result};
 
-use super::{Issue, IssueClient};
+use super::{check_http_response, Issue, IssueClient};
 
 const ENDPOINT: &str = "https://api.linear.app/graphql";
 
@@ -26,7 +26,6 @@ impl LinearClient {
         Self { http, endpoint: ENDPOINT.into(), team_key, token }
     }
 
-    /// Override the endpoint (for tests against a wiremock server).
     #[cfg(test)]
     pub fn with_endpoint(mut self, endpoint: String) -> Self {
         self.endpoint = endpoint;
@@ -111,14 +110,7 @@ impl LinearClient {
             .send()
             .await
             .map_err(|e| Error::Spawn(format!("linear: {e}")))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(Error::Spawn(format!(
-                "linear {ctx}: HTTP {status}: {}",
-                body.chars().take(200).collect::<String>()
-            )));
-        }
+        let resp = check_http_response(resp, &format!("linear {ctx}")).await?;
         let env: GqlEnvelope<T> = resp
             .json()
             .await

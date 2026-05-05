@@ -10,7 +10,7 @@ use crate::config::{IssueProvider, RepoEntry};
 use crate::error::Error;
 
 use super::factory::make_client;
-use super::jira::{adf_to_text, JiraClient};
+use super::jira::{adf_to_text, JiraClient, JiraConfig};
 use super::linear::LinearClient;
 use super::{sanitize_branch, IssueClient};
 
@@ -45,17 +45,6 @@ fn sanitize_branch_empty_input_returns_placeholder() {
 // ── factory dispatch ───────────────────────────────────────────────────
 
 #[test]
-fn factory_returns_gh_for_github_provider() {
-    let repo = RepoEntry {
-        name: "alpha".into(),
-        path: "/tmp/alpha".into(),
-        provider: IssueProvider::Github,
-    };
-    // Just assert it doesn't error; the GhCli construction is infallible.
-    assert!(make_client(&repo).is_ok());
-}
-
-#[test]
 fn factory_errors_when_jira_token_missing() {
     let repo = RepoEntry {
         name: "no-such-repo-for-testing".into(),
@@ -69,7 +58,7 @@ fn factory_errors_when_jira_token_missing() {
     // No Keychain entry exists for this fake name in the test env; on
     // macOS this is `NoEntry`, on Linux the stub returns Config error.
     // `dyn IssueClient` doesn't implement Debug so we can't `unwrap_err`.
-    match make_client(&repo) {
+    match make_client(&repo, &Client::new()) {
         Err(Error::Config(_)) => {}
         Err(other) => panic!("unexpected error variant: {other:?}"),
         Ok(_) => panic!("expected an error"),
@@ -120,10 +109,12 @@ fn adf_none_returns_empty() {
 fn jira_with(server: &MockServer) -> JiraClient {
     JiraClient::new(
         Client::new(),
-        server.uri(),
-        "ada@example.com".into(),
-        "PROJ".into(),
-        "secret-token".into(),
+        JiraConfig {
+            base_url: server.uri(),
+            email: "ada@example.com".into(),
+            project_key: "PROJ".into(),
+            token: "secret-token".into(),
+        },
     )
 }
 

@@ -15,28 +15,57 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 
-use super::{Issue, IssueClient};
+use super::{check_http_response, Issue, IssueClient};
+
+pub struct JiraConfig {
+    pub base_url: String,
+    pub email: String,
+    pub project_key: String,
+    pub token: String,
+}
 
 pub struct JiraClient {
     http: Client,
-    base_url: String,
-    email: String,
-    project_key: String,
-    token: String,
+    cfg: JiraConfig,
 }
 
 impl JiraClient {
-    pub fn new(http: Client, base_url: String, email: String, project_key: String, token: String) -> Self {
-        Self { http, base_url, email, project_key, token }
+    pub fn new(http: Client, cfg: JiraConfig) -> Self {
+        Self { http, cfg }
     }
 
     fn auth_header(&self) -> String {
-        let raw = format!("{}:{}", self.email, self.token);
+        let raw = format!("{}:{}", self.cfg.email, self.cfg.token);
         format!("Basic {}", B64.encode(raw))
     }
 
     fn issue_url(&self, key: &str) -> String {
-        format!("{}/browse/{key}", self.base_url.trim_end_matches('/'))
+        format!("{}/browse/{key}", self.cfg.base_url.trim_end_matches('/'))
+    }
+
+    fn endpoint(&self, suffix: &str) -> String {
+        format!("{}{suffix}", self.cfg.base_url.trim_end_matches('/'))
+    }
+
+    async fn get_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        url: &str,
+        query: &[(&str, &str)],
+        ctx: &str,
+    ) -> Result<T> {
+        let resp = self
+            .http
+            .get(url)
+            .header("Authorization", self.auth_header())
+            .header("Accept", "application/json")
+            .query(query)
+            .send()
+            .await
+            .map_err(|e| Error::Spawn(format!("jira: {e}")))?;
+        let resp = check_http_response(resp, ctx).await?;
+        resp.json()
+            .await
+            .map_err(|e| Error::Spawn(format!("jira json: {e}")))
     }
 }
 
@@ -60,41 +89,25 @@ struct RawFields {
     description: Option<Value>,
 }
 
-async fn check_status(resp: reqwest::Response, ctx: &str) -> Result<reqwest::Response> {
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(Error::Spawn(format!(
-            "{ctx}: HTTP {status}: {}",
-            body.chars().take(200).collect::<String>()
-        )));
-    }
-    Ok(resp)
-}
-
 #[async_trait]
 impl IssueClient for JiraClient {
     async fn list(&self, _repo_path: &Path) -> Result<Vec<Issue>> {
-        let jql = format!("project = {} AND statusCategory != Done ORDER BY updated DESC", self.project_key);
-        let url = format!("{}/rest/api/3/search", self.base_url.trim_end_matches('/'));
-        let resp = self
-            .http
-            .get(&url)
-            .header("Authorization", self.auth_header())
-            .header("Accept", "application/json")
-            .query(&[
-                ("jql", jql.as_str()),
-                ("maxResults", "50"),
-                ("fields", "summary,labels"),
-            ])
-            .send()
-            .await
-            .map_err(|e| Error::Spawn(format!("jira: {e}")))?;
-        let resp = check_status(resp, "jira search").await?;
-        let parsed: SearchResp = resp
-            .json()
-            .await
-            .map_err(|e| Error::Spawn(format!("jira json: {e}")))?;
+        let jql = format!(
+            "project = {} AND statusCategory != Done ORDER BY updated DESC",
+            self.cfg.project_key
+        );
+        let url = self.endpoint("/rest/api/3/search");
+        let parsed: SearchResp = self
+            .get_json(
+                &url,
+                &[
+                    ("jql", jql.as_str()),
+                    ("maxResults", "50"),
+                    ("fields", "summary,labels"),
+                ],
+                "jira search",
+            )
+            .await?;
         Ok(parsed
             .issues
             .into_iter()
@@ -108,21 +121,10 @@ impl IssueClient for JiraClient {
     }
 
     async fn view(&self, _repo_path: &Path, id: &str) -> Result<Issue> {
-        let url = format!("{}/rest/api/3/issue/{id}", self.base_url.trim_end_matches('/'));
-        let resp = self
-            .http
-            .get(&url)
-            .header("Authorization", self.auth_header())
-            .header("Accept", "application/json")
-            .query(&[("fields", "summary,labels")])
-            .send()
-            .await
-            .map_err(|e| Error::Spawn(format!("jira: {e}")))?;
-        let resp = check_status(resp, "jira view").await?;
-        let raw: RawIssue = resp
-            .json()
-            .await
-            .map_err(|e| Error::Spawn(format!("jira json: {e}")))?;
+        let url = self.endpoint(&format!("/rest/api/3/issue/{id}"));
+        let raw: RawIssue = self
+            .get_json(&url, &[("fields", "summary,labels")], "jira view")
+            .await?;
         Ok(Issue {
             url: self.issue_url(&raw.key),
             id: raw.key,
@@ -132,21 +134,10 @@ impl IssueClient for JiraClient {
     }
 
     async fn body(&self, _repo_path: &Path, id: &str) -> Result<String> {
-        let url = format!("{}/rest/api/3/issue/{id}", self.base_url.trim_end_matches('/'));
-        let resp = self
-            .http
-            .get(&url)
-            .header("Authorization", self.auth_header())
-            .header("Accept", "application/json")
-            .query(&[("fields", "description")])
-            .send()
-            .await
-            .map_err(|e| Error::Spawn(format!("jira: {e}")))?;
-        let resp = check_status(resp, "jira body").await?;
-        let raw: RawIssue = resp
-            .json()
-            .await
-            .map_err(|e| Error::Spawn(format!("jira json: {e}")))?;
+        let url = self.endpoint(&format!("/rest/api/3/issue/{id}"));
+        let raw: RawIssue = self
+            .get_json(&url, &[("fields", "description")], "jira body")
+            .await?;
         Ok(adf_to_text(raw.fields.description.as_ref()))
     }
 }

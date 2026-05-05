@@ -5,13 +5,32 @@
 //! provider factory and never leave the Rust side over IPC except via
 //! the explicit `set_provider_secret` setter.
 
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
 use crate::error::{Error, Result};
 
 #[cfg(target_os = "macos")]
 const SERVICE: &str = "issue-orchestrator";
 
-/// The Keychain account string for `(kind, repo_name)`. Public so the
-/// IPC commands and tests can format it identically.
+/// Provider kinds that own a Keychain-backed token. GitHub is excluded
+/// because the `gh` CLI manages its own auth.
+#[derive(Clone, Copy, Debug, Type, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderSecretKind {
+    Jira,
+    Linear,
+}
+
+impl ProviderSecretKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Jira => "jira",
+            Self::Linear => "linear",
+        }
+    }
+}
+
 pub fn account(kind: &str, repo_name: &str) -> String {
     format!("{kind}:{repo_name}")
 }
