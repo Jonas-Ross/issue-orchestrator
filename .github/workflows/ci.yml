@@ -13,10 +13,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Node 24+ — the test script's NODE_OPTIONS=--no-webstorage flag
-          # exists from Node 22.4 but isn't allowed inside NODE_OPTIONS
-          # until later in the 22 line; using current LTS sidesteps this.
-          node-version: 24
+          # Node 25 — the test script wraps `vitest` with
+          # NODE_OPTIONS=--no-webstorage to disable the native localStorage
+          # that ships in Node 25 (see CLAUDE.md "Node 25 quirk"). That
+          # flag is allowed inside NODE_OPTIONS only on Node 25.
+          node-version: 25
           cache: npm
 
       # Tauri's Linux build needs GTK + webkit system libs even just to
