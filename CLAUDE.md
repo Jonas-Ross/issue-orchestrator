@@ -46,6 +46,20 @@ publishes `RegistryEvent`s on an unbounded mpsc; it never touches `AppHandle`.
 receiver, and spawn flow be unit-tested without a Tauri runtime — tests
 subscribe to `RegistryEvent` directly.
 
+The 20-odd `#[tauri::command]` functions are split across
+`ipc/{pty,setup,repos,issues,secrets}.rs` by domain; `mod.rs` owns only
+`AppState` and the bridge.
+
+### Config actor (`src-tauri/src/config/`)
+
+`Config` (the on-disk JSON: repos, worktree root, spawn-prompt template,
+setup flag) is owned by a `ConfigActor` mirroring `SessionRegistryActor`.
+`AppState.config` is a cheap `Clone` `ConfigHandle` — every IPC command
+goes through the typed mailbox via `handle.snapshot().await`,
+`handle.lookup_repo(name).await`, etc. No `Mutex<Config>`, no "drop the
+guard before `.await`" discipline to enforce by hand. Persistence
+(`Config::save`) lives inside the actor; only it touches the file.
+
 ### Typed IPC contract (`make_specta_builder` in `src-tauri/src/lib.rs`)
 
 Single source of truth for the Rust ↔ TS surface. Both runtime startup and
@@ -54,7 +68,19 @@ the `bin/export-bindings` binary call it, so `src/lib/bindings.ts`
 `#[tauri::command]` and `#[derive(specta::Type)]` definitions. **When adding
 a command or event type, you must also add it to `collect_commands!` /
 `collect_events!` in `make_specta_builder`** — otherwise the frontend won't
-see it.
+see it. Commands are referenced by their full path
+(`ipc::pty::pty_spawn`, `ipc::issues::list_issues`, …) because
+`tauri-specta`'s macro generates a sibling `__specta__fn__X` that doesn't
+follow `pub use` re-exports.
+
+### Typed errors (`src-tauri/src/error.rs`)
+
+`Error` carries the failing subsystem in its variant: `Http` (Jira/Linear
+transport), `Issues` (`gh` CLI), `Git` (`git` CLI), `ClaudeCli` (`claude
+-p` and JSON parsing of model output), `Spawn` (the spawn flow itself —
+worktree setup, registry channel sends), `Hooks`, `Pty`, `Registry`,
+`Config`, `SessionNotFound`, `Io`. Don't reach for `Spawn` as a
+catch-all; pick the variant that points at the actual failure.
 
 ### Hook bridge (Claude Code → app)
 
@@ -82,9 +108,17 @@ the script's `[ ! -S "$sock" ]` guard exits 0, so non-orchestrator
 Claude sessions are unaffected.
 
 Correlation key is **`ISSUE_ORCH_SESSION_ID`** (env var injected by
-`apply_common_env` in `registry/mod.rs` at PTY spawn time), not `cwd` — so
-the user can `cd` freely without breaking status. Without `jq` installed,
-the listener still parses payloads but correlation is lost.
+`apply_common_env` in `registry/builder.rs` at PTY spawn time), not `cwd`
+— so the user can `cd` freely without breaking status. Without `jq`
+installed, the listener still parses payloads but correlation is lost.
+
+The same `apply_common_env` runs every inherited env var through
+`should_drop_env` and strips credential-shaped names (`AWS_*`,
+`GOOGLE_APPLICATION_CREDENTIALS`, `*_PASSWORD`, `*_PASSWD`, `*_SECRET`,
+`GCP_*_KEY`) before handing the env to the child PTY. Workflow-relevant
+tokens (`ANTHROPIC_API_KEY`, `GH_TOKEN`, `JIRA_TOKEN`, etc.) pass
+through. Add to the const lists at the top of `builder.rs` if a new
+credential class shows up.
 
 The script is a static checked-in file — no Rust-side template or
 generator. To change hook behavior edit
@@ -92,13 +126,18 @@ generator. To change hook behavior edit
 plugin version in both `.claude-plugin/marketplace.json` and
 `plugins/issue-orchestrator/.claude-plugin/plugin.json`.
 
-### Boundary traits for shellouts (`src-tauri/src/spawn.rs`)
+### Boundary traits for shellouts
 
-`IssueClient` (wraps `gh`) and `GitRunner` (wraps `git`) are traits stored
-in `AppState` as `Arc<dyn …>`. Production: `GhCli` / `GitCli`. Tests in
-`src-tauri/src/spawn/tests.rs` substitute recording mocks, so spawn-flow
-tests touch no real `gh` and create no real worktrees. Same pattern should
-be used whenever a new external CLI is shelled out to.
+`IssueClient` (`src-tauri/src/issues/mod.rs`) and `GitRunner`
+(`src-tauri/src/spawn/git.rs`) are traits stored in `AppState` as
+`Arc<dyn …>` (or constructed per-call from `RepoEntry.provider` for
+`IssueClient` — different repos can use different sources). Production
+impls: `GhCli` / `JiraClient` / `LinearClient` for issues; `GitCli` for
+git. Tests in `src-tauri/src/spawn/tests.rs` substitute recording mocks,
+so spawn-flow tests touch no real `gh` / `git` and create no real
+worktrees; provider tests in `src-tauri/src/issues/tests.rs` use
+`wiremock` for Jira/Linear HTTP. Same pattern should be used whenever a
+new external CLI or HTTP API is shelled out to.
 
 ### PTY layer (`src-tauri/src/pty.rs`)
 
@@ -139,10 +178,16 @@ production tests use the default.
 
 ```
 ~/Library/Application Support/app.issue-orchestrator.desktop/
-├── config.json     # repos[], worktreeRoot, setupDone — atomic save via .tmp + rename
+├── config.json     # version, worktreeRoot, repos[] (each with provider),
+│                   #   spawnPromptTemplate?, setupDone
+│                   # Atomic save via .tmp + rename
 ├── hooks.sock      # UDS, removed and re-bound on every app start
 └── events.jsonl    # append-only raw hook audit log
 ```
+
+Per-repo provider tokens (Jira/Linear API keys) live in the macOS
+Keychain — never in `config.json`, never returned over IPC. See
+`src-tauri/src/issues/secrets.rs`.
 
 The hook script lives under Claude Code's plugin directory (the user's
 `~/.claude/plugins/...`), not here — see "Hook bridge" above for the
@@ -232,6 +277,27 @@ gate: it runs `npm run lint`, `npm run fmt:check`, `tsc --noEmit`, and
 
 Rust code (`src-tauri/`) is out of scope here — `cargo fmt` and `clippy`
 own that side.
+
+## Before opening a PR: docs check
+
+After finishing any non-trivial change, scan `CLAUDE.md` and `README.md`
+for drift before opening the PR. The two files describe the architecture
+and the user-facing setup respectively, and they go stale fast when
+modules move, IPC signatures change, the config schema evolves, or a
+new external dependency is added. Common things to re-verify:
+
+- File / module paths cited in either doc still exist and contain what
+  the doc claims they contain.
+- `config.json` example in `README.md` matches the current `Config`
+  shape (version number, fields, defaults).
+- Architecture tree in `README.md` matches the current `src-tauri/src/`
+  and `src/` layouts.
+- Any new IPC command, error variant, or actor is mentioned in
+  `CLAUDE.md`'s architecture section if it represents a new pattern.
+- Test counts / coverage descriptions in either doc still match
+  reality.
+
+A docs-update commit is part of the PR, not a follow-up.
 
 ## Things that are deliberately out of scope
 
