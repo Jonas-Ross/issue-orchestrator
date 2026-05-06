@@ -154,14 +154,28 @@ never intercepted.
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
   "worktreeRoot": "~/dev/worktrees",
   "repos": [
-    { "name": "issue-team", "path": "/Users/you/Documents/GitHub/issue-team" }
+    {
+      "name": "issue-team",
+      "path": "/Users/you/Documents/GitHub/issue-team",
+      "provider": { "kind": "github" }
+    }
   ],
+  "spawnPromptTemplate": null,
   "setupDone": true
 }
 ```
+
+Per-repo `provider` can be `{"kind": "github"}`, `{"kind": "jira",
+"baseUrl": "...", "email": "...", "projectKey": "..."}`, or `{"kind":
+"linear", "teamKey": "..."}`. Jira/Linear tokens live in the macOS
+Keychain (Settings → Repos → Set token), never in this file.
+
+`spawnPromptTemplate` is optional; `null` falls back to the built-in
+default (`"Use the issue-team skill to implement issue #{issue_id}
+({issue_title})."`).
 
 Edit through the in-app Settings panel rather than the file directly —
 the app does atomic save (write-to-temp + rename) and the panel
@@ -175,7 +189,8 @@ See [CLAUDE.md](CLAUDE.md) for the full tour. The short version:
 
 - **Actor-owned registry** (`src-tauri/src/registry/`) is the single
   owner of all session state. Mutations go through a `tokio::mpsc`
-  mailbox; no shared `Mutex<HashMap>`.
+  mailbox; no shared `Mutex<HashMap>`. The same pattern wraps the
+  on-disk `Config` (`src-tauri/src/config/`).
 - **Typed IPC contract** via `specta` + `tauri-specta`. The Rust
   command/event surface generates `src/lib/bindings.ts` (gitignored,
   regenerated on every dev launch). Add a command? `cargo tauri dev`
@@ -194,12 +209,18 @@ See [CLAUDE.md](CLAUDE.md) for the full tour. The short version:
 src-tauri/src/
 ├── main.rs / lib.rs       # Tauri builder, command + event registration
 ├── pty.rs                 # Stateless PTY spawn
-├── registry/              # SessionRegistryActor + RegistryCmd / Event
-├── ipc/                   # #[tauri::command] surface, specta event types
+├── registry/              # SessionRegistryActor, RegistryCmd / Event,
+│                          # PTY command builder + env filter
+├── ipc/                   # #[tauri::command] surface split per domain:
+│                          # pty / setup / repos / issues / secrets
 ├── hooks/                 # UDS listener + JSONL audit log
 │                          # (the script itself ships under plugins/)
-├── spawn/                 # IssueClient + GitRunner traits, spawn_issue_session
-├── config.rs              # JSON config load/save with atomic rename
+├── spawn/                 # spawn_issue_session, GitRunner trait,
+│                          # headless `claude -p` drivers
+├── issues/                # IssueClient trait + GitHub / Jira / Linear
+│                          # impls + Keychain-backed secrets
+├── config/                # Config types + ConfigActor (mailbox-owned)
+├── error.rs               # Typed Error variants per subsystem
 ├── paths.rs               # App-data path helpers (macOS hardcoded)
 └── bin/export-bindings.rs # Regenerates src/lib/bindings.ts
 
@@ -217,22 +238,31 @@ src/
 ## Tests
 
 ```bash
-cargo test --manifest-path src-tauri/Cargo.toml --lib
+cargo test --manifest-path src-tauri/Cargo.toml --lib   # backend
+npm test                                                 # frontend
 ```
 
-Covers the three pillars:
+Backend covers the four pillars:
 
 - **Registry actor** — spawn → kill round-trip, write to unknown
   session, real-PTY `PtyData` event flow.
 - **Hook receiver** — status mapping for
   `SessionStart`/`Notification`/`Stop`/`SessionEnd`, audit-log
-  persistence, hooks for unknown sessions silently dropped.
+  persistence, pretty-printed payload tolerance, hooks for unknown
+  sessions silently dropped.
 - **Spawn flow** — new-branch path uses `git worktree add -b`,
   existing-branch uses bare `worktree add`, existing-worktree skips
   git entirely. Mocks `IssueClient` and `GitRunner` so no real `gh`
   or worktrees are touched.
+- **Issue providers** — Jira and Linear HTTP clients tested via
+  `wiremock`; auth headers, error paths, GraphQL error handling.
 
-There are no frontend tests yet; UI verification is manual.
+Frontend uses Vitest + jsdom + `@testing-library/preact` with the
+Tauri command/event mocks in `src/test/tauri-mock.ts`. Component
+coverage is selective (heavy components like `TerminalView` /
+`IssuePicker` defer to E2E); state modules and the smaller
+components are fully covered. See `CLAUDE.md` → "Test strategy"
+for the full breakdown.
 
 ### Try it out
 

@@ -5,6 +5,9 @@ use specta::Type;
 
 use crate::error::{Error, Result};
 
+mod actor;
+pub use actor::{ConfigActor, ConfigHandle};
+
 /// Per-repo issue source. The `kind` discriminator is what the factory in
 /// `crate::issues::make_client` matches on. Tokens for `Jira` / `Linear`
 /// live in the macOS Keychain — never in this struct, never in
@@ -151,7 +154,7 @@ impl Config {
     /// Replace the issue provider for a named repo. Returns the updated
     /// entry. Errors if no repo by that name exists. The IPC layer is
     /// responsible for refusing this when the repo has live sessions —
-    /// see `ipc::update_repo_provider`.
+    /// see `ipc::repos::update_repo_provider`.
     pub fn update_repo_provider(
         &mut self,
         name: &str,

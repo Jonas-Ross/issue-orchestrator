@@ -10,8 +10,20 @@ pub enum Error {
     SessionNotFound(String),
     #[error("hooks: {0}")]
     Hooks(String),
+    /// Spawn flow: worktree setup, registry channel-send failures.
     #[error("spawn: {0}")]
     Spawn(String),
+    #[error("git: {0}")]
+    Git(String),
+    /// `gh` CLI failures and issue-provider construction.
+    #[error("issues: {0}")]
+    Issues(String),
+    /// Jira / Linear HTTP transport, status, JSON.
+    #[error("http: {0}")]
+    Http(String),
+    /// Headless `claude -p` failures (timeouts, exits, output parsing).
+    #[error("claude: {0}")]
+    ClaudeCli(String),
     #[error("config: {0}")]
     Config(String),
     #[error("io: {0}")]

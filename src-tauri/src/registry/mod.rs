@@ -1,3 +1,4 @@
+mod builder;
 pub mod session;
 pub mod status;
 
@@ -7,7 +8,6 @@ mod tests;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use portable_pty::CommandBuilder;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tokio::sync::{mpsc, oneshot};
@@ -18,6 +18,7 @@ use crate::error::{Error, Result};
 use crate::hooks::{HookEvent, NotificationKind};
 use crate::pty::{self, PtyEvent};
 
+use self::builder::build_command;
 use self::session::Session;
 pub use self::status::Status;
 
@@ -40,8 +41,8 @@ pub struct SessionSummary {
     pub repo_name: Option<String>,
 }
 
-/// What kind of process to launch. Phase 1 only spawns bash; Phase 3 (M4)
-/// will use the `Claude` variant for issue-team sessions.
+/// What kind of process to launch — a debug `bash` for the diagnostic
+/// shell or a `claude` session for an issue-team worktree.
 #[derive(Debug)]
 pub enum SpawnSpec {
     Bash,
@@ -328,66 +329,3 @@ fn emit(events: &mpsc::UnboundedSender<RegistryEvent>, evt: RegistryEvent) {
     }
 }
 
-struct BuiltCommand {
-    cmd: CommandBuilder,
-    title: String,
-    worktree_path: Option<PathBuf>,
-    issue_url: Option<String>,
-    branch: Option<String>,
-    repo_name: Option<String>,
-}
-
-/// Translate a `SpawnSpec` into a portable-pty `CommandBuilder` plus
-/// metadata. Always copies the parent env, sets `TERM=xterm-256color`,
-/// and seeds `ISSUE_ORCH_SESSION_ID` so spawned processes can be
-/// correlated back to a session via M3 hooks.
-fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltCommand> {
-    match spec {
-        SpawnSpec::Bash => {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-            let mut cmd = CommandBuilder::new(shell);
-            apply_common_env(&mut cmd, orch_id);
-            if let Ok(home) = std::env::var("HOME") {
-                cmd.cwd(home);
-            }
-            Ok(BuiltCommand {
-                cmd,
-                title: "bash".to_owned(),
-                worktree_path: None,
-                issue_url: None,
-                branch: None,
-                repo_name: None,
-            })
-        }
-        SpawnSpec::Claude {
-            cwd,
-            prompt,
-            worktree_path,
-            title,
-            issue_url,
-            branch,
-            repo_name,
-        } => {
-            let mut cmd = CommandBuilder::new("claude");
-            apply_common_env(&mut cmd, orch_id);
-            cmd.cwd(&cwd);
-            cmd.arg(prompt);
-            Ok(BuiltCommand {
-                cmd,
-                title,
-                worktree_path: Some(worktree_path),
-                issue_url,
-                branch,
-                repo_name: Some(repo_name),
-            })
-        }
-    }
-}
-
-fn apply_common_env(cmd: &mut CommandBuilder, orch_id: &str) {
-    for (k, v) in std::env::vars() {
-        cmd.env(k, v);
-    }
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("ISSUE_ORCH_SESSION_ID", orch_id);
-}
