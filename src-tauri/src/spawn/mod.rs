@@ -15,8 +15,6 @@ pub mod headless;
 #[cfg(test)]
 mod tests;
 
-// Re-exports so existing call sites (`crate::spawn::Issue`,
-// `crate::spawn::GitRunner`, etc.) keep compiling.
 pub use crate::issues::Issue;
 pub use git::{validate_git_repo, GitCli, GitRunner};
 pub use headless::{

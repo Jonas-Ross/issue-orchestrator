@@ -41,8 +41,8 @@ pub struct SessionSummary {
     pub repo_name: Option<String>,
 }
 
-/// What kind of process to launch. Phase 1 only spawns bash; Phase 3 (M4)
-/// will use the `Claude` variant for issue-team sessions.
+/// What kind of process to launch — a debug `bash` for the diagnostic
+/// shell or a `claude` session for an issue-team worktree.
 #[derive(Debug)]
 pub enum SpawnSpec {
     Bash,

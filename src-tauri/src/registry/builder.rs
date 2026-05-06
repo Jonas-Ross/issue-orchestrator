@@ -16,9 +16,9 @@ pub(super) struct BuiltCommand {
 }
 
 /// Translate a `SpawnSpec` into a portable-pty `CommandBuilder` plus
-/// metadata. Always copies the parent env, sets `TERM=xterm-256color`,
-/// and seeds `ISSUE_ORCH_SESSION_ID` so spawned processes can be
-/// correlated back to a session via M3 hooks.
+/// metadata. Inherits the parent env (filtered through `should_drop_env`),
+/// sets `TERM=xterm-256color`, and seeds `ISSUE_ORCH_SESSION_ID` so
+/// hooks fired by the spawned `claude` can correlate back to a session.
 pub(super) fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltCommand> {
     match spec {
         SpawnSpec::Bash => {
@@ -73,6 +73,20 @@ fn apply_common_env(cmd: &mut CommandBuilder, orch_id: &str) {
     cmd.env("ISSUE_ORCH_SESSION_ID", orch_id);
 }
 
+/// Exact env-var names dropped before a child PTY inherits them.
+const EXACT_DROPS: &[&str] = &[
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+];
+
+/// Suffix-matched (case-insensitive) drops. `_SECRET` is broad — it
+/// will catch `STRIPE_SECRET`, `WEBHOOK_SECRET`, etc., which is
+/// intentional. If a workflow-relevant credential ever ends in `_SECRET`
+/// it would need to be explicitly allowed.
+const SUFFIX_DROPS: &[&str] = &["_PASSWORD", "_PASSWD", "_SECRET"];
+
 /// Drop credential-shaped env vars from the inherited env so a session
 /// PTY can't see (and a misbehaving subprocess can't exfiltrate) the
 /// dev's cloud secrets, DB passwords, etc. Workflow-relevant API keys
@@ -80,19 +94,13 @@ fn apply_common_env(cmd: &mut CommandBuilder, orch_id: &str) {
 /// dropping those would break the user's `gh` / `claude` setup.
 fn should_drop_env(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
-    if matches!(
-        upper.as_str(),
-        "AWS_ACCESS_KEY_ID"
-            | "AWS_SECRET_ACCESS_KEY"
-            | "AWS_SESSION_TOKEN"
-            | "GOOGLE_APPLICATION_CREDENTIALS"
-    ) {
+    if EXACT_DROPS.contains(&upper.as_str()) {
         return true;
     }
-    upper.ends_with("_PASSWORD")
-        || upper.ends_with("_PASSWD")
-        || upper.ends_with("_SECRET")
-        || (upper.starts_with("GCP_") && upper.ends_with("_KEY"))
+    if SUFFIX_DROPS.iter().any(|s| upper.ends_with(s)) {
+        return true;
+    }
+    upper.starts_with("GCP_") && upper.ends_with("_KEY")
 }
 
 #[cfg(test)]

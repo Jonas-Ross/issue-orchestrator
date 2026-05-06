@@ -117,36 +117,40 @@ async fn run_claude_p(repo_path: &std::path::Path, prompt: &str) -> Result<Strin
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Tolerantly extract a rewritten prompt from `claude -p` stdout. Same
-/// fence/chatter tolerance as `parse_decision`.
 pub fn parse_optimized_prompt(raw: &str) -> Result<String> {
     #[derive(Deserialize)]
     struct OptimizedPrompt {
         prompt: String,
     }
-    let trimmed = raw.trim();
-    let cleaned = strip_fence(trimmed);
-    let json_str = extract_first_object(cleaned)
-        .ok_or_else(|| Error::ClaudeCli(format!("no JSON object in claude output: {raw}")))?;
-    let parsed: OptimizedPrompt = serde_json::from_str(json_str).map_err(|e| {
-        Error::ClaudeCli(format!("parse optimized prompt json: {e} (input: {json_str})"))
-    })?;
+    let parsed: OptimizedPrompt = parse_first_json(raw, "optimized prompt")?;
     if parsed.prompt.trim().is_empty() {
         return Err(Error::ClaudeCli("model returned empty prompt".into()));
     }
     Ok(parsed.prompt)
 }
 
-/// Tolerantly extract a `Decision` from `claude -p` stdout. The model is
-/// asked to emit raw JSON, but we strip ``` fences and locate the first
-/// `{...}` block defensively in case it adds chatter.
 pub fn parse_decision(raw: &str) -> Result<Decision> {
-    let trimmed = raw.trim();
-    let cleaned = strip_fence(trimmed);
-    let json_str = extract_first_object(cleaned)
-        .ok_or_else(|| Error::ClaudeCli(format!("no JSON object in claude output: {raw}")))?;
-    serde_json::from_str::<Decision>(json_str)
-        .map_err(|e| Error::ClaudeCli(format!("parse decision json: {e} (input: {json_str})")))
+    parse_first_json(raw, "decision")
+}
+
+/// Pull the first balanced JSON object out of `claude -p` stdout. The
+/// model is told to emit raw JSON; in practice it sometimes adds
+/// preamble or wraps the payload in ``` fences. Strip the fence, jump
+/// to the first `{`, then let serde_json's streaming `Deserializer`
+/// own the brace/string/escape tracking — we only have to slice off
+/// the chatter.
+fn parse_first_json<T: serde::de::DeserializeOwned>(raw: &str, ctx: &str) -> Result<T> {
+    let cleaned = strip_fence(raw.trim());
+    let start = cleaned.find('{').ok_or_else(|| {
+        Error::ClaudeCli(format!("no JSON object in claude output ({ctx}): {raw}"))
+    })?;
+    serde_json::Deserializer::from_str(&cleaned[start..])
+        .into_iter::<T>()
+        .next()
+        .ok_or_else(|| {
+            Error::ClaudeCli(format!("no JSON object in claude output ({ctx}): {raw}"))
+        })?
+        .map_err(|e| Error::ClaudeCli(format!("parse {ctx} json: {e} (input: {raw})")))
 }
 
 fn strip_fence(s: &str) -> &str {
@@ -158,42 +162,6 @@ fn strip_fence(s: &str) -> &str {
         return rest.trim_start_matches('\n').trim_end_matches("```").trim();
     }
     s
-}
-
-/// Slice the first balanced `{...}` block out of `s`, ignoring braces
-/// that appear inside JSON string literals so payloads like
-/// `{"reasoning": "use {brace}"}` parse correctly. Tracks `\` escapes
-/// inside strings so an escaped quote (`\"`) doesn't end the string.
-fn extract_first_object(s: &str) -> Option<&str> {
-    let start = s.find('{')?;
-    let mut depth = 0i32;
-    let mut in_string = false;
-    let mut escape = false;
-    for (i, c) in s[start..].char_indices() {
-        if in_string {
-            if escape {
-                escape = false;
-            } else if c == '\\' {
-                escape = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-            continue;
-        }
-        match c {
-            '"' => in_string = true,
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    let end = start + i + c.len_utf8();
-                    return Some(&s[start..end]);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
 }
 
 #[cfg(test)]

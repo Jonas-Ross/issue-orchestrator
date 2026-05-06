@@ -46,9 +46,7 @@ pub async fn decide_next_issue(
         .map_err(Into::into)
 }
 
-/// Persist (or clear, when `template = None`) the user-configured spawn
-/// prompt template. Atomic-saves the config file via the existing
-/// `Config::save` path.
+/// `template = None` resets to the built-in default.
 #[tauri::command]
 #[specta::specta]
 pub async fn update_spawn_prompt(
@@ -58,10 +56,8 @@ pub async fn update_spawn_prompt(
     state.config.update_spawn_prompt(template).await.map_err(Into::into)
 }
 
-/// Ask `claude -p` (running in the chosen repo's cwd) to rewrite the
-/// supplied template using whatever skills/MCPs/plugins are visible to a
-/// session there. Returns the rewritten template; the caller is
-/// responsible for calling `update_spawn_prompt` to actually persist it.
+/// Returns the rewritten template; the caller is responsible for calling
+/// `update_spawn_prompt` to actually persist it.
 #[tauri::command]
 #[specta::specta]
 pub async fn optimize_spawn_prompt(
@@ -85,8 +81,13 @@ pub async fn spawn_issue_session(
     rows: u16,
     prompt_override: Option<String>,
 ) -> Result<SessionSummary, String> {
-    let repo = state.config.lookup_repo(&repo_name).await.map_err(|e| e.to_string())?;
     let config = state.config.snapshot().await.map_err(|e| e.to_string())?;
+    let repo = config
+        .repos
+        .iter()
+        .find(|r| r.name == repo_name)
+        .cloned()
+        .ok_or_else(|| format!("unknown repo: {repo_name}"))?;
     let client = issues::make_client(&repo, &state.http).map_err(|e| e.to_string())?;
 
     spawn::spawn_issue_session(

@@ -1,8 +1,6 @@
-//! Actor wrapping the on-disk `Config`. Mirrors `SessionRegistryActor`'s
-//! pattern: every read or mutation goes through the typed mailbox, so by
-//! construction no caller can hold the config across an `.await` and
-//! deadlock-shaped bugs are designed away. Persistence (`Config::save`)
-//! lives inside the actor — only it touches the file.
+//! Actor wrapping the on-disk `Config`. Every read or mutation goes
+//! through the typed mailbox, so by construction no caller can hold the
+//! config across an `.await` and deadlock-shaped bugs are designed away.
 
 use std::path::{Path, PathBuf};
 
@@ -13,7 +11,7 @@ use crate::error::{Error, Result};
 
 use super::{Config, IssueProvider, RepoEntry};
 
-pub enum ConfigCmd {
+enum ConfigCmd {
     Snapshot {
         reply: oneshot::Sender<Config>,
     },
@@ -154,43 +152,33 @@ pub struct ConfigHandle {
 
 impl ConfigHandle {
     pub async fn snapshot(&self) -> Result<Config> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::Snapshot { reply: tx }).await?;
-        rx.await.map_err(channel_err)
+        self.ask(|reply| ConfigCmd::Snapshot { reply }).await
     }
 
     pub async fn lookup_repo(&self, name: &str) -> Result<RepoEntry> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::LookupRepo {
+        self.ask_fallible(|reply| ConfigCmd::LookupRepo {
             name: name.to_owned(),
-            reply: tx,
+            reply,
         })
-        .await?;
-        rx.await.map_err(channel_err)?
+        .await
     }
 
     pub async fn list_repos(&self) -> Result<Vec<RepoEntry>> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::ListRepos { reply: tx }).await?;
-        rx.await.map_err(channel_err)
+        self.ask(|reply| ConfigCmd::ListRepos { reply }).await
     }
 
     pub async fn get_setup_state(&self) -> Result<bool> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::GetSetupState { reply: tx }).await?;
-        rx.await.map_err(channel_err)
+        self.ask(|reply| ConfigCmd::GetSetupState { reply }).await
     }
 
     pub async fn add_repo(&self, path: PathBuf) -> Result<RepoEntry> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::AddRepo { path, reply: tx }).await?;
-        rx.await.map_err(channel_err)?
+        self.ask_fallible(|reply| ConfigCmd::AddRepo { path, reply })
+            .await
     }
 
     pub async fn remove_repo(&self, name: String) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::RemoveRepo { name, reply: tx }).await?;
-        rx.await.map_err(channel_err)?
+        self.ask_fallible(|reply| ConfigCmd::RemoveRepo { name, reply })
+            .await
     }
 
     pub async fn update_repo_provider(
@@ -198,30 +186,39 @@ impl ConfigHandle {
         name: String,
         provider: IssueProvider,
     ) -> Result<RepoEntry> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::UpdateRepoProvider {
+        self.ask_fallible(|reply| ConfigCmd::UpdateRepoProvider {
             name,
             provider,
-            reply: tx,
+            reply,
         })
-        .await?;
-        rx.await.map_err(channel_err)?
+        .await
     }
 
     pub async fn update_spawn_prompt(&self, template: Option<String>) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::UpdateSpawnPrompt {
-            template,
-            reply: tx,
-        })
-        .await?;
-        rx.await.map_err(channel_err)?
+        self.ask_fallible(|reply| ConfigCmd::UpdateSpawnPrompt { template, reply })
+            .await
     }
 
     pub async fn mark_setup_done(&self) -> Result<()> {
+        self.ask_fallible(|reply| ConfigCmd::MarkSetupDone { reply })
+            .await
+    }
+
+    /// Round-trip a command whose reply is the value itself (infallible
+    /// reads).
+    async fn ask<R>(&self, build: impl FnOnce(oneshot::Sender<R>) -> ConfigCmd) -> Result<R> {
         let (tx, rx) = oneshot::channel();
-        self.send(ConfigCmd::MarkSetupDone { reply: tx }).await?;
-        rx.await.map_err(channel_err)?
+        self.send(build(tx)).await?;
+        rx.await.map_err(channel_err)
+    }
+
+    /// Round-trip a command whose reply is itself a `Result` (mutators
+    /// that can fail to persist or to find a target).
+    async fn ask_fallible<R>(
+        &self,
+        build: impl FnOnce(oneshot::Sender<Result<R>>) -> ConfigCmd,
+    ) -> Result<R> {
+        self.ask(build).await?
     }
 
     async fn send(&self, cmd: ConfigCmd) -> Result<()> {

@@ -8,11 +8,9 @@ use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
 
-/// Append-only JSONL audit log. Each line is the original hook payload as
-/// received over the socket (so the schema can drift over time and we
-/// still have the raw record). `Logger` is `Clone` so each accept-loop
-/// task can hold its own handle; mutation is serialized via the inner
-/// async Mutex so we don't block the runtime under hook bursts.
+/// Append-only JSONL audit log. Each line is the original hook payload
+/// verbatim, so the schema can drift over time and we still have the
+/// raw record.
 #[derive(Clone)]
 pub struct Logger {
     inner: Arc<Mutex<File>>,
@@ -38,7 +36,6 @@ impl Logger {
         bytes.push(b'\n');
         let mut f = self.inner.lock().await;
         f.write_all(&bytes).await?;
-        f.flush().await?;
         Ok(())
     }
 }
