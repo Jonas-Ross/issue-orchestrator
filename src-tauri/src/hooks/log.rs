@@ -36,6 +36,11 @@ impl Logger {
         bytes.push(b'\n');
         let mut f = self.inner.lock().await;
         f.write_all(&bytes).await?;
+        // Required: tokio::fs::File queues writes onto a background blocking
+        // thread; without flush(), a concurrent read of the same file can
+        // race ahead of pending queued writes (manifests as missing lines
+        // in hooks::tests::hook_routes_status_change_to_session under CI).
+        f.flush().await?;
         Ok(())
     }
 }
