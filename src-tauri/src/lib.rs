@@ -65,6 +65,15 @@ pub fn run() {
     init_tracing();
     info!("starting issue-orchestrator");
 
+    // keyring-core's default credential store is process-global and must
+    // be installed before any Entry::new. Failure here means subsequent
+    // secret operations will surface NoDefaultStore — log and continue
+    // rather than abort startup.
+    #[cfg(target_os = "macos")]
+    if let Err(e) = issues::secrets::init_default_store() {
+        warn!(?e, "keychain default store init failed");
+    }
+
     let config_path = paths::config_path().expect("compute config path");
     let sock_path = paths::hooks_socket_path().expect("compute hooks socket path");
     let log_path = paths::hooks_log_path().expect("compute hooks log path");

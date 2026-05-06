@@ -35,9 +35,22 @@ pub fn account(kind: &str, repo_name: &str) -> String {
     format!("{kind}:{repo_name}")
 }
 
+/// Install the macOS Keychain as keyring-core's default credential
+/// store. Idempotent and safe to call multiple times — `set_default_store`
+/// is documented to block waiting for in-flight Entry constructions and
+/// then swap the store atomically. Call once at app startup before any
+/// `Entry::new`.
 #[cfg(target_os = "macos")]
-fn entry(kind: &str, repo_name: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, &account(kind, repo_name))
+pub fn init_default_store() -> Result<()> {
+    let store = apple_native_keyring_store::keychain::Store::new()
+        .map_err(|e| Error::Config(format!("keychain init: {e}")))?;
+    keyring_core::set_default_store(store);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn entry(kind: &str, repo_name: &str) -> Result<keyring_core::Entry> {
+    keyring_core::Entry::new(SERVICE, &account(kind, repo_name))
         .map_err(|e| Error::Config(format!("keychain: {e}")))
 }
 
@@ -45,7 +58,7 @@ fn entry(kind: &str, repo_name: &str) -> Result<keyring::Entry> {
 pub fn get_token(kind: &str, repo_name: &str) -> Result<String> {
     let e = entry(kind, repo_name)?;
     e.get_password().map_err(|err| match err {
-        keyring::Error::NoEntry => Error::Config(format!(
+        keyring_core::Error::NoEntry => Error::Config(format!(
             "no token in Keychain for {}",
             account(kind, repo_name)
         )),
@@ -65,7 +78,7 @@ pub fn delete_token(kind: &str, repo_name: &str) -> Result<()> {
     let e = entry(kind, repo_name)?;
     match e.delete_credential() {
         Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(keyring_core::Error::NoEntry) => Ok(()),
         Err(err) => Err(Error::Config(format!("keychain delete: {err}"))),
     }
 }
@@ -75,7 +88,7 @@ pub fn token_exists(kind: &str, repo_name: &str) -> Result<bool> {
     let e = entry(kind, repo_name)?;
     match e.get_password() {
         Ok(_) => Ok(true),
-        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(keyring_core::Error::NoEntry) => Ok(false),
         Err(err) => Err(Error::Config(format!("keychain read: {err}"))),
     }
 }
