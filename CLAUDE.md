@@ -86,26 +86,29 @@ catch-all; pick the variant that points at the actual failure.
 
 Hooks ship as a Claude Code plugin under `plugins/issue-orchestrator/`,
 distributed via the marketplace manifest at `.claude-plugin/marketplace.json`
-in this repo's root. Users install with `/plugin marketplace add
-Jonas-Ross/issue-orchestrator` then `/plugin install
-issue-orchestrator@issue-orchestrator`. Claude Code expands
-`${CLAUDE_PLUGIN_ROOT}` in `plugins/issue-orchestrator/hooks/hooks.json`
-to the plugin's installed directory, so hook entries always point at a
-real script and survive app rename / uninstall without leaving stale
-paths in user-managed `~/.claude/settings.json`.
+in this repo's root. (User-facing install steps live in `README.md` →
+"First-run setup".) Claude Code expands `${CLAUDE_PLUGIN_ROOT}` in
+`plugins/issue-orchestrator/hooks/hooks.json` to the plugin's installed
+directory, so hook entries always point at a real script and survive
+app rename / uninstall without leaving stale paths in user-managed
+`~/.claude/settings.json`.
 
-Path: Claude session fires hook → plugin script
-`${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh` runs → script pipes JSON
-through `jq -c` to inject `session_orch_id` from
-`$ISSUE_ORCH_SESSION_ID` and `nc -U`s it to `hooks.sock` →
-`hooks::run_listener` reads the connection (tolerates multi-line
-pretty-printed JSON via `serde_json::Deserializer::from_slice
-.into_iter`) → `RegistryCmd::HookEvent` → actor maps
-`SessionStart/Notification/Stop/SessionEnd` to `Status` and emits
-`StatusChange`. Hooks for sessions we didn't spawn (no
-`session_orch_id`) are silently dropped. When the app isn't running
-the script's `[ ! -S "$sock" ]` guard exits 0, so non-orchestrator
-Claude sessions are unaffected.
+The end-to-end hook flow:
+
+1. Claude session fires a hook event.
+2. The plugin script `${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh` runs.
+3. Script pipes the payload through `jq -c` to inject `session_orch_id`
+   from `$ISSUE_ORCH_SESSION_ID`, then `nc -U`s it to `hooks.sock`.
+4. `hooks::run_listener` reads the connection — it tolerates multi-line
+   pretty-printed JSON via `serde_json::Deserializer::from_slice.into_iter`
+   for the case when `jq` isn't installed.
+5. `RegistryCmd::HookEvent` reaches the actor, which maps
+   `SessionStart` / `Notification` / `Stop` / `SessionEnd` to `Status` and
+   emits `StatusChange`.
+
+Hooks for sessions we didn't spawn (no `session_orch_id`) are silently
+dropped. When the app isn't running, the script's `[ ! -S "$sock" ]`
+guard exits 0, so non-orchestrator Claude sessions are unaffected.
 
 Correlation key is **`ISSUE_ORCH_SESSION_ID`** (env var injected by
 `apply_common_env` in `registry/builder.rs` at PTY spawn time), not `cwd`
@@ -197,11 +200,14 @@ plugin-distribution model.
 
 ### Backend (Rust)
 
-Unit tests for the three pillars:
+Unit tests for the four pillars:
 - `registry/tests.rs` — actor command round-trips, event emission, real-PTY data flow.
 - `hooks/tests.rs` — status mapping, JSONL persistence, unknown-session drop.
 - `spawn/tests.rs` — mocks `IssueClient` and `GitRunner` to cover the
   new-branch, existing-branch, and existing-worktree paths.
+- `issues/tests.rs` — `wiremock`-driven coverage of the Jira/Linear HTTP
+  clients (auth headers, error paths, GraphQL error handling) plus
+  `sanitize_branch` and provider-factory dispatch.
 
 ### Frontend (Vitest + jsdom + @testing-library/preact)
 
@@ -275,8 +281,12 @@ Write / MultiEdit, so style drift gets corrected in-loop. CI
 gate: it runs `npm run lint`, `npm run fmt:check`, `tsc --noEmit`, and
 `npm test` on every PR.
 
-Rust code (`src-tauri/`) is out of scope here — `cargo fmt` and `clippy`
-own that side.
+Rust code (`src-tauri/`) is out of scope here — `cargo fmt --manifest-path
+src-tauri/Cargo.toml` and `cargo clippy --manifest-path src-tauri/Cargo.toml
+--lib --no-deps` own that side. Three pre-existing clippy warnings
+(`too_many_arguments` on `spawn_issue_session`, manual `Default` impl on
+`IssueProvider`, `while let Some` loop in `hooks/mod.rs`) are accepted —
+don't fix them in unrelated PRs.
 
 ## Before opening a PR: docs check
 
