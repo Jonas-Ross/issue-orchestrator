@@ -91,6 +91,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            let _ = fix_path_env::fix();
+
             builder.mount_events(app);
 
             let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();

@@ -30,6 +30,7 @@ shellexpand = "3.1.2"
 async-trait = "0.1.89"
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
 base64 = "0.22"
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring-core = "1"

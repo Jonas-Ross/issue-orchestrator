@@ -22,11 +22,19 @@ npm run fmt                                                      # oxfmt rewrite
 npm run fmt:check                                                # oxfmt --check — CI gate
 npm run bindings                                                 # regenerate src/lib/bindings.ts (also runs via predev/prebuild)
 npm run build                                                    # tsc + vite production build
+cargo tauri build --bundles app                                  # dogfood .app at src-tauri/target/release/bundle/macos/
 ```
 
 `cargo tauri dev` invokes `npm run dev` via `beforeDevCommand`, which itself
 runs `predev` → `npm run bindings`, so the TS bindings stay in sync with the
 Rust IPC surface on every launch.
+
+`cargo tauri build --bundles app` is for **dogfooding only**, not
+distribution (`tauri.conf.json` has `bundle.active: false`, which the
+`--bundles app` flag overrides). The resulting `.app` is unsigned —
+first launch needs a right-click → Open to bypass Gatekeeper. The
+dogfood `.app` and a `cargo tauri dev` instance both bind `hooks.sock`
+and share `config.json`, so don't run them at the same time.
 
 ## Architecture: the parts you can't grasp from a single file
 
