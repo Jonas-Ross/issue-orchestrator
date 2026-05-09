@@ -13,6 +13,9 @@ src/lib/bindings.ts
 # OS
 .DS_Store
 
+# Superpowers brainstorm scratch
+.superpowers/
+
 # Claude Code local config (per-user paths, allowlists, etc.)
 # Default: ignore everything under .claude, then re-include the
 # project-shared bits (settings.json + scripts/) so settings.local.json
