@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-shell";
+import { useState, useEffect } from "preact/hooks";
 import { commands } from "../lib/bindings";
 import type { SessionSummary } from "../lib/bindings";
 import { copyToClipboard } from "../lib/clipboard";
@@ -35,8 +36,26 @@ export function SidebarRow({ session, collapsed }: Props) {
   const issueNum = issueIdFromUrl(session.issueUrl);
   const branchOrPath = session.branch ?? session.worktreePath ?? "—";
 
+  const [replyValue, setReplyValue] = useState("");
+
+  useEffect(() => {
+    if (!isNeeds) setReplyValue("");
+  }, [isNeeds]);
+
   const onSelect = () => {
     activeId.value = session.id;
+  };
+
+  const onReplyKeyDown = (e: KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      const text = replyValue;
+      setReplyValue("");
+      void commands.ptyWrite(session.id, text + "\n");
+    } else if (e.key === "Escape") {
+      setReplyValue("");
+      (e.target as HTMLInputElement).blur();
+    }
   };
 
   const onContextMenu = (e: MouseEvent) => {
@@ -145,6 +164,18 @@ export function SidebarRow({ session, collapsed }: Props) {
             {branchOrPath}
           </span>
         </div>
+      )}
+
+      {isNeeds && (
+        <input
+          class="sb-row-reply"
+          type="text"
+          value={replyValue}
+          placeholder="Reply…"
+          onInput={(e) => setReplyValue((e.target as HTMLInputElement).value)}
+          onKeyDown={onReplyKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        />
       )}
     </div>
   );
