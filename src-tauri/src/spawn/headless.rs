@@ -35,7 +35,8 @@ pub async fn decide_next_issue(
 
     let prompt = build_decide_prompt(&issues);
     let stdout = run_claude_p(&repo_path, &prompt).await?;
-    let decision = parse_decision(&stdout)?;
+    let mut decision = parse_decision(&stdout)?;
+    decision.id = normalize_id(&decision.id).to_string();
 
     if !issues.iter().any(|i| i.id == decision.id) {
         return Err(Error::ClaudeCli(format!(
@@ -133,6 +134,14 @@ pub fn parse_decision(raw: &str) -> Result<Decision> {
     parse_first_json(raw, "decision")
 }
 
+/// The decide prompt lists GitHub issues as `- #26 — …`, so the model
+/// often copies the `#` into the returned id. `Issue.id` is bare
+/// (`"26"`), so strip a leading `#` before comparing. Safe for
+/// Jira/Linear keys (`PROJ-7`, `ENG-456`) — they never start with `#`.
+fn normalize_id(id: &str) -> &str {
+    id.strip_prefix('#').unwrap_or(id)
+}
+
 /// Pull the first balanced JSON object out of `claude -p` stdout. The
 /// model is told to emit raw JSON; in practice it sometimes adds
 /// preamble or wraps the payload in ``` fences. Strip the fence, jump
@@ -208,6 +217,14 @@ mod tests {
         let d = parse_decision(raw).unwrap();
         assert_eq!(d.id, "12");
         assert_eq!(d.reasoning, "use {brace} carefully");
+    }
+
+    #[test]
+    fn normalize_id_strips_leading_hash() {
+        assert_eq!(normalize_id("#26"), "26");
+        assert_eq!(normalize_id("26"), "26");
+        assert_eq!(normalize_id("PROJ-7"), "PROJ-7");
+        assert_eq!(normalize_id("ENG-456"), "ENG-456");
     }
 
     #[test]
