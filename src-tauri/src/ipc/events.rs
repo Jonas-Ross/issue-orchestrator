@@ -31,3 +31,8 @@ pub struct SessionAdded(pub SessionSummary);
 pub struct SessionRemoved {
     pub session_id: SessionId,
 }
+
+/// A session's `SessionSummary` shape changed (title, repo_name, …).
+/// Used for the cwd-inferred rebucket of ad-hoc Claude sessions.
+#[derive(Clone, Debug, Type, Serialize, Deserialize, Event)]
+pub struct SessionUpdated(pub SessionSummary);

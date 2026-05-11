@@ -6,6 +6,16 @@ use crate::error::Result;
 
 use super::SpawnSpec;
 
+/// Title shown in the sidebar for a scratch `claude` session. Single
+/// source so the spawn path (`ipc::pty::claude_spawn`) and the
+/// cwd-inferred rebucket (`registry::handle_hook`) can't drift.
+pub fn claude_title(repo: Option<&str>) -> String {
+    match repo {
+        Some(name) => format!("Claude · {name}"),
+        None => "Claude".to_owned(),
+    }
+}
+
 pub(super) struct BuiltCommand {
     pub cmd: CommandBuilder,
     pub title: String,
@@ -57,6 +67,23 @@ pub(super) fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltComma
                 issue_url,
                 branch,
                 repo_name: Some(repo_name),
+            })
+        }
+        SpawnSpec::ClaudeAdHoc {
+            cwd,
+            title,
+            repo_name,
+        } => {
+            let mut cmd = CommandBuilder::new("claude");
+            apply_common_env(&mut cmd, orch_id);
+            cmd.cwd(&cwd);
+            Ok(BuiltCommand {
+                cmd,
+                title,
+                worktree_path: None,
+                issue_url: None,
+                branch: None,
+                repo_name,
             })
         }
     }

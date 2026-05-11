@@ -4,17 +4,46 @@ pub mod log;
 mod tests;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use serde_json::Value;
 use tokio::io::AsyncReadExt;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
+use crate::config::ConfigHandle;
 use crate::error::{Error, Result};
 use crate::registry::RegistryCmd;
 
 use self::log::Logger;
+
+/// Resolves a filesystem path to the orchestrator-tracked repo it lives
+/// inside, if any. Returned value is the `RepoEntry.name`. The trait
+/// keeps the hook listener decoupled from `ConfigHandle` for tests —
+/// `hooks/tests.rs` plugs in a small fake instead of spinning up a
+/// real config actor.
+#[async_trait]
+pub trait RepoLookup: Send + Sync + 'static {
+    async fn repo_for_path(&self, path: &str) -> Option<String>;
+}
+
+#[async_trait]
+impl RepoLookup for ConfigHandle {
+    async fn repo_for_path(&self, path: &str) -> Option<String> {
+        // Channel failures propagate as `None` — the hook bridge is
+        // best-effort enrichment, never load-bearing. The actor will
+        // log on its own if something is genuinely broken.
+        match self.repo_containing_path(path).await {
+            Ok(opt) => opt.map(|r| r.name),
+            Err(e) => {
+                warn!(?e, "config lookup failed during hook enrichment");
+                None
+            }
+        }
+    }
+}
 
 /// On `Notification` events, Claude Code distinguishes between a real
 /// permission prompt (blocking on the user) and the 60s inactivity
@@ -48,6 +77,11 @@ pub struct HookEvent {
     pub cwd: Option<String>,
     pub transcript_path: Option<String>,
     pub notification_kind: Option<NotificationKind>,
+    /// Set by the listener (post-parse, pre-dispatch) to the name of
+    /// the orchestrator-tracked repo whose path contains `cwd`, if
+    /// any. The registry uses it to rebucket ad-hoc Claude sessions
+    /// that started without a `repo_name`.
+    pub inferred_repo_name: Option<String>,
     pub raw: Value,
 }
 
@@ -65,6 +99,7 @@ impl HookEvent {
                 .get("notification_type")
                 .and_then(Value::as_str)
                 .map(NotificationKind::parse),
+            inferred_repo_name: None,
             raw: v,
         })
     }
@@ -72,11 +107,14 @@ impl HookEvent {
 
 /// Run the hook UDS server until the socket fails to accept. Each
 /// connection reads newline-delimited JSON and dispatches each line as
-/// a `RegistryCmd::HookEvent` plus an audit log append.
+/// a `RegistryCmd::HookEvent` plus an audit log append. The `repos`
+/// lookup is consulted per event to populate `inferred_repo_name`
+/// from `cwd`, which lets the actor rebucket ad-hoc Claude sessions.
 pub async fn run_listener(
     sock_path: PathBuf,
     log_path: PathBuf,
     registry: mpsc::Sender<RegistryCmd>,
+    repos: Arc<dyn RepoLookup>,
 ) -> Result<()> {
     if sock_path.exists() {
         // Stale socket from a previous run — remove or bind() will fail.
@@ -92,8 +130,9 @@ pub async fn run_listener(
             Ok((stream, _addr)) => {
                 let registry = registry.clone();
                 let logger = logger.clone();
+                let repos = Arc::clone(&repos);
                 tokio::spawn(async move {
-                    handle_connection(stream, registry, logger).await;
+                    handle_connection(stream, registry, logger, repos).await;
                 });
             }
             Err(e) => {
@@ -107,6 +146,7 @@ async fn handle_connection(
     mut stream: tokio::net::UnixStream,
     registry: mpsc::Sender<RegistryCmd>,
     logger: Logger,
+    repos: Arc<dyn RepoLookup>,
 ) {
     let mut bytes = Vec::with_capacity(4096);
     if let Err(e) = stream.read_to_end(&mut bytes).await {
@@ -130,7 +170,10 @@ async fn handle_connection(
                     warn!(?e, "failed to append hook event to log");
                 }
                 match HookEvent::from_value(value) {
-                    Some(evt) => {
+                    Some(mut evt) => {
+                        if let Some(cwd) = evt.cwd.as_deref() {
+                            evt.inferred_repo_name = repos.repo_for_path(cwd).await;
+                        }
                         if let Err(e) = registry.send(RegistryCmd::HookEvent(evt)).await {
                             warn!(?e, "failed to forward hook event to registry");
                         }

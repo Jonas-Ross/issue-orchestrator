@@ -2,7 +2,7 @@
 //! through the typed mailbox, so by construction no caller can hold the
 //! config across an `.await` and deadlock-shaped bugs are designed away.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use tokio::sync::{mpsc, oneshot};
 use tracing::info;
@@ -18,6 +18,12 @@ enum ConfigCmd {
     LookupRepo {
         name: String,
         reply: oneshot::Sender<Result<RepoEntry>>,
+    },
+    /// Resolve a filesystem path to the `RepoEntry` it lives inside, if
+    /// any. Used by the hook listener to bucket ad-hoc Claude runs.
+    RepoContainingPath {
+        path: String,
+        reply: oneshot::Sender<Option<RepoEntry>>,
     },
     ListRepos {
         reply: oneshot::Sender<Vec<RepoEntry>>,
@@ -73,6 +79,9 @@ impl ConfigActor {
                 ConfigCmd::LookupRepo { name, reply } => {
                     let _ = reply.send(self.lookup(&name));
                 }
+                ConfigCmd::RepoContainingPath { path, reply } => {
+                    let _ = reply.send(self.config.repo_containing_path(&path));
+                }
                 ConfigCmd::ListRepos { reply } => {
                     let _ = reply.send(self.config.repos.clone());
                 }
@@ -108,7 +117,7 @@ impl ConfigActor {
             .ok_or_else(|| Error::Config(format!("unknown repo: {name}")))
     }
 
-    fn add(&mut self, path: &Path) -> Result<RepoEntry> {
+    fn add(&mut self, path: &std::path::Path) -> Result<RepoEntry> {
         let entry = self.config.add_repo(path)?;
         self.persist()?;
         Ok(entry)
@@ -158,6 +167,17 @@ impl ConfigHandle {
     pub async fn lookup_repo(&self, name: &str) -> Result<RepoEntry> {
         self.ask_fallible(|reply| ConfigCmd::LookupRepo {
             name: name.to_owned(),
+            reply,
+        })
+        .await
+    }
+
+    /// Resolve a path to its containing repo (longest-prefix match,
+    /// canonicalization-tolerant). Returns `Ok(None)` when no repo
+    /// contains the path. Channel failures are still `Err`.
+    pub async fn repo_containing_path(&self, path: &str) -> Result<Option<RepoEntry>> {
+        self.ask(|reply| ConfigCmd::RepoContainingPath {
+            path: path.to_owned(),
             reply,
         })
         .await

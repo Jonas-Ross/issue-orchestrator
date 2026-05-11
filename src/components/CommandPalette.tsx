@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { commands } from "../lib/bindings";
+import { spawnBash } from "../lib/spawn-bash";
+import { spawnClaude } from "../lib/spawn-claude";
 import { activeId, sessions } from "../state/sessions";
 import { openPicker } from "../state/picker";
 import { closePalette, paletteOpen } from "../state/palette";
+import { repos } from "../state/repos";
 import { Modal } from "./Modal";
 
 interface PaletteAction {
@@ -13,15 +16,23 @@ interface PaletteAction {
 }
 
 export function CommandPalette() {
-  if (!paletteOpen.value) return null;
-
+  const open = paletteOpen.value;
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Re-fire on every open transition so subsequent opens of the same
+  // component instance still autofocus and start from a clean query.
+  // Empty-deps `useEffect(..., [])` only fires once per mount, and
+  // Preact keeps this component instance around across open/close
+  // toggles, which is why earlier opens worked but later ones didn't.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (open) {
+      setQuery("");
+      setActiveIdx(0);
+      inputRef.current?.focus();
+    }
+  }, [open]);
 
   const all: PaletteAction[] = useMemo(() => {
     const out: PaletteAction[] = [];
@@ -32,6 +43,33 @@ export function CommandPalette() {
       run: () => {
         closePalette();
         openPicker();
+      },
+    });
+    out.push({
+      id: "new-claude-scratch",
+      label: "New Claude session (scratch)",
+      run: () => {
+        closePalette();
+        void spawnClaude();
+      },
+    });
+    for (const r of repos.value) {
+      out.push({
+        id: `new-claude-${r.name}`,
+        label: `New Claude session in ${r.name}`,
+        run: () => {
+          closePalette();
+          void spawnClaude(r.name);
+        },
+      });
+    }
+    out.push({
+      id: "new-bash",
+      label: "Debug bash",
+      hint: "⌘⇧B",
+      run: () => {
+        closePalette();
+        void spawnBash();
       },
     });
     if (activeId.value) {
@@ -60,9 +98,9 @@ export function CommandPalette() {
     return out;
     // Reading `signal.value` inside the memo IS the reactive subscription
     // we want; oxlint's react-hooks/exhaustive-deps doesn't recognize that
-    // pattern and flags `sessions` / `activeId` as unnecessary.
+    // pattern and flags `sessions` / `activeId` / `repos` as unnecessary.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions.value, activeId.value]);
+  }, [sessions.value, activeId.value, repos.value]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -95,6 +133,8 @@ export function CommandPalette() {
       filtered[activeIdx]?.run();
     }
   };
+
+  if (!open) return null;
 
   return (
     <Modal onClose={() => closePalette()} style={{ width: 480 }}>

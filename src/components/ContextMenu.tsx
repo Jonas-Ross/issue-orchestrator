@@ -20,12 +20,16 @@ export function ContextMenu() {
 
   if (!state) return null;
 
+  const positionStyle =
+    state.anchor === "bottom-right"
+      ? {
+          right: `${window.innerWidth - state.x}px`,
+          bottom: `${window.innerHeight - state.y}px`,
+        }
+      : { left: `${state.x}px`, top: `${state.y}px` };
+
   return (
-    <ul
-      class="context-menu"
-      style={{ left: `${state.x}px`, top: `${state.y}px` }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <ul class="context-menu" style={positionStyle} onClick={(e) => e.stopPropagation()}>
       {state.items.map((item, i) =>
         "separator" in item ? (
           <li key={`sep-${i}`} class="separator" />

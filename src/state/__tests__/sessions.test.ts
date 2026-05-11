@@ -76,6 +76,36 @@ describe("sessions state", () => {
     });
   });
 
+  describe("updateSession", () => {
+    it("replaces the matching session by id and preserves order", () => {
+      const { sessions, addSession, updateSession } = createSessionsState();
+      addSession(makeSession({ id: "s1", title: "old", repoName: null }));
+      addSession(makeSession({ id: "s2", title: "keep", repoName: "beta" }));
+      updateSession(makeSession({ id: "s1", title: "Claude · alpha", repoName: "alpha" }));
+      expect(sessions.value.map((s) => s.id)).toEqual(["s1", "s2"]);
+      expect(sessions.value[0].title).toBe("Claude · alpha");
+      expect(sessions.value[0].repoName).toBe("alpha");
+      expect(sessions.value[1].title).toBe("keep");
+    });
+
+    it("is a no-op for unknown ids", () => {
+      const { sessions, addSession, updateSession } = createSessionsState();
+      addSession(makeSession({ id: "s1", title: "kept" }));
+      updateSession(makeSession({ id: "nope", title: "ghost" }));
+      expect(sessions.value).toHaveLength(1);
+      expect(sessions.value[0].title).toBe("kept");
+    });
+
+    it("re-buckets when repoName changes (via sessionsByRepo recompute)", () => {
+      const { sessionsByRepo, addSession, updateSession } = createSessionsState();
+      addSession(makeSession({ id: "s1", repoName: null }));
+      expect(sessionsByRepo.value.get(SHELL_BUCKET)).toHaveLength(1);
+      updateSession(makeSession({ id: "s1", repoName: "alpha", title: "Claude · alpha" }));
+      expect(sessionsByRepo.value.get(SHELL_BUCKET)).toBeUndefined();
+      expect(sessionsByRepo.value.get("alpha")).toHaveLength(1);
+    });
+  });
+
   describe("sessionsByRepo", () => {
     it("groups by repoName", () => {
       const { sessionsByRepo, addSession } = createSessionsState();

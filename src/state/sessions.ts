@@ -40,6 +40,14 @@ export function createSessionsState() {
     sessions.value = sessions.value.map((s) => (s.id === id ? { ...s, status } : s));
   }
 
+  /// Replace a session in-place by id. Used by the cwd-inferred rebucket
+  /// event when the backend moves an ad-hoc Claude row into its
+  /// repo's drawer (changing `repoName` and `title`). Silently no-ops
+  /// on unknown id so the reducer is forgiving.
+  function updateSession(updated: SessionSummary) {
+    sessions.value = sessions.value.map((s) => (s.id === updated.id ? updated : s));
+  }
+
   return {
     sessions,
     activeId,
@@ -48,6 +56,7 @@ export function createSessionsState() {
     addSession,
     removeSession,
     setStatus,
+    updateSession,
   };
 }
 
@@ -60,4 +69,5 @@ export const {
   addSession,
   removeSession,
   setStatus,
+  updateSession,
 } = sessionsStore;

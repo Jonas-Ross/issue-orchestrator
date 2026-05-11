@@ -32,6 +32,7 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             ipc::pty::pty_spawn,
+            ipc::pty::claude_spawn,
             ipc::pty::pty_write,
             ipc::pty::pty_resize,
             ipc::pty::pty_kill,
@@ -58,6 +59,7 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::events::StatusChange,
             ipc::events::SessionAdded,
             ipc::events::SessionRemoved,
+            ipc::events::SessionUpdated,
         ])
 }
 
@@ -100,18 +102,24 @@ pub fn run() {
             let registry_tx = registry::SessionRegistryActor::spawn(event_tx);
             ipc::spawn_event_bridge(app.handle().clone(), event_rx);
 
+            let config_handle = config::ConfigActor::spawn(config.clone(), config_path.clone());
+
             let registry_for_hooks = registry_tx.clone();
             let sock_for_hooks = sock_path.clone();
             let log_for_hooks = log_path.clone();
+            let repos_for_hooks: Arc<dyn hooks::RepoLookup> = Arc::new(config_handle.clone());
             tauri::async_runtime::spawn(async move {
-                if let Err(e) =
-                    hooks::run_listener(sock_for_hooks, log_for_hooks, registry_for_hooks).await
+                if let Err(e) = hooks::run_listener(
+                    sock_for_hooks,
+                    log_for_hooks,
+                    registry_for_hooks,
+                    repos_for_hooks,
+                )
+                .await
                 {
                     error!(?e, "hook listener exited");
                 }
             });
-
-            let config_handle = config::ConfigActor::spawn(config.clone(), config_path.clone());
 
             app.manage(ipc::AppState {
                 registry: registry_tx,

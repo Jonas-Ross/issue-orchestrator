@@ -4,6 +4,7 @@ import { openContextMenu } from "../state/context-menu";
 import type { ContextMenuItem } from "../state/context-menu";
 import type { RepoEntry, SessionSummary } from "../lib/bindings";
 import { copyToClipboard } from "../lib/clipboard";
+import { spawnClaude } from "../lib/spawn-claude";
 import { SidebarRow } from "./SidebarRow";
 
 interface Props {
@@ -64,7 +65,15 @@ export function RepoDrawer({ repo, sessions }: Props) {
           title={`New session in ${repo.name}`}
           onClick={(e) => {
             e.stopPropagation();
-            openPicker(repo.name);
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            openContextMenu({
+              x: rect.left,
+              y: rect.bottom + 4,
+              items: [
+                { label: "New issue session", action: () => openPicker(repo.name) },
+                { label: "New Claude session", action: () => void spawnClaude(repo.name) },
+              ],
+            });
           }}
         >
           ＋

@@ -1,5 +1,7 @@
+use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use serde_json::json;
 use tempfile::tempdir;
 use tokio::io::AsyncWriteExt;
@@ -11,7 +13,38 @@ use crate::registry::{
     RegistryCmd, RegistryEvent, SessionRegistryActor, SessionSummary, SpawnSpec, Status,
 };
 
-use super::run_listener;
+use super::{run_listener, RepoLookup};
+
+/// `RepoLookup` fake used by existing status-mapping tests that don't
+/// care about cwd inference. Always returns `None`, matching the
+/// "no repos registered" behavior of a fresh config.
+struct NoRepos;
+
+#[async_trait]
+impl RepoLookup for NoRepos {
+    async fn repo_for_path(&self, _path: &str) -> Option<String> {
+        None
+    }
+}
+
+fn no_repos() -> Arc<dyn RepoLookup> {
+    Arc::new(NoRepos)
+}
+
+/// `RepoLookup` fake that returns a fixed repo name for any path with a
+/// given prefix. Lets us verify the listener actually wires cwd through
+/// to the inference path without a real config actor.
+struct PrefixRepoLookup {
+    prefix: String,
+    repo: String,
+}
+
+#[async_trait]
+impl RepoLookup for PrefixRepoLookup {
+    async fn repo_for_path(&self, path: &str) -> Option<String> {
+        path.starts_with(&self.prefix).then(|| self.repo.clone())
+    }
+}
 
 async fn spawn_bash(tx: &mpsc::Sender<RegistryCmd>) -> SessionSummary {
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -86,7 +119,7 @@ async fn hook_routes_status_change_to_session() {
         let log = log.clone();
         let cmd_tx = cmd_tx.clone();
         tokio::spawn(async move {
-            let _ = run_listener(sock, log, cmd_tx).await;
+            let _ = run_listener(sock, log, cmd_tx, no_repos()).await;
         });
     }
 
@@ -144,7 +177,7 @@ async fn notification_idle_prompt_maps_to_idle_not_needs_input() {
         let log = log.clone();
         let cmd_tx = cmd_tx.clone();
         tokio::spawn(async move {
-            let _ = run_listener(sock, log, cmd_tx).await;
+            let _ = run_listener(sock, log, cmd_tx, no_repos()).await;
         });
     }
 
@@ -196,7 +229,7 @@ async fn pretty_printed_hook_payload_parses() {
         let log = log.clone();
         let cmd_tx = cmd_tx.clone();
         tokio::spawn(async move {
-            let _ = run_listener(sock, log, cmd_tx).await;
+            let _ = run_listener(sock, log, cmd_tx, no_repos()).await;
         });
     }
 
@@ -215,6 +248,61 @@ async fn pretty_printed_hook_payload_parses() {
 }
 
 #[tokio::test]
+async fn listener_populates_inferred_repo_name_from_cwd() {
+    let dir = tempdir().expect("tempdir");
+    let sock = dir.path().join("hooks.sock");
+    let log = dir.path().join("events.jsonl");
+
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let cmd_tx = SessionRegistryActor::spawn(event_tx);
+
+    let repos: Arc<dyn RepoLookup> = Arc::new(PrefixRepoLookup {
+        prefix: "/work/alpha".into(),
+        repo: "alpha".into(),
+    });
+
+    {
+        let sock = sock.clone();
+        let log = log.clone();
+        let cmd_tx = cmd_tx.clone();
+        let repos = Arc::clone(&repos);
+        tokio::spawn(async move {
+            let _ = run_listener(sock, log, cmd_tx, repos).await;
+        });
+    }
+
+    let summary = spawn_bash(&cmd_tx).await;
+    assert!(summary.repo_name.is_none());
+
+    send_hook(
+        &sock,
+        json!({
+            "hook_event_name": "SessionStart",
+            "session_id": "claude-1",
+            "session_orch_id": summary.id,
+            "cwd": "/work/alpha/sub/dir",
+        }),
+    )
+    .await;
+
+    // The listener enriches with inferred_repo_name; the actor then
+    // rebuckets the session and emits SessionUpdated.
+    let updated = timeout(Duration::from_secs(5), async {
+        loop {
+            match event_rx.recv().await.expect("event channel closed") {
+                RegistryEvent::SessionUpdated(s) if s.id == summary.id => return s,
+                _ => continue,
+            }
+        }
+    })
+    .await
+    .expect("SessionUpdated timed out");
+
+    assert_eq!(updated.repo_name.as_deref(), Some("alpha"));
+    assert_eq!(updated.title, "Claude · alpha");
+}
+
+#[tokio::test]
 async fn hook_for_unknown_session_is_ignored() {
     let dir = tempdir().expect("tempdir");
     let sock = dir.path().join("hooks.sock");
@@ -228,7 +316,7 @@ async fn hook_for_unknown_session_is_ignored() {
         let log = log.clone();
         let cmd_tx = cmd_tx.clone();
         tokio::spawn(async move {
-            let _ = run_listener(sock, log, cmd_tx).await;
+            let _ = run_listener(sock, log, cmd_tx, no_repos()).await;
         });
     }
 

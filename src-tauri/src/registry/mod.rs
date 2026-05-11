@@ -5,6 +5,8 @@ pub mod status;
 #[cfg(test)]
 mod tests;
 
+pub use self::builder::claude_title;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -41,8 +43,12 @@ pub struct SessionSummary {
     pub repo_name: Option<String>,
 }
 
-/// What kind of process to launch — a debug `bash` for the diagnostic
-/// shell or a `claude` session for an issue-team worktree.
+/// What kind of process to launch — a debug `bash`, a `claude` for an
+/// issue-team worktree, or an ad-hoc scratch `claude` (no prompt, no
+/// worktree). Ad-hoc sessions optionally carry a `repo_name` so the
+/// sidebar can bucket them under that repo's drawer at spawn time;
+/// when `None`, they land in the unbucketed drawer and may be
+/// rebucketed later via the hook's `cwd` inference.
 #[derive(Debug)]
 pub enum SpawnSpec {
     Bash,
@@ -54,6 +60,11 @@ pub enum SpawnSpec {
         issue_url: Option<String>,
         branch: Option<String>,
         repo_name: String,
+    },
+    ClaudeAdHoc {
+        cwd: PathBuf,
+        title: String,
+        repo_name: Option<String>,
     },
 }
 
@@ -106,6 +117,11 @@ pub enum RegistryEvent {
     SessionRemoved {
         session_id: SessionId,
     },
+    /// A session's mutable shape (e.g. `repo_name`, `title`) changed
+    /// outside of a status transition. Emitted when the hook bridge
+    /// rebuckets an ad-hoc Claude session into its cwd-matched repo.
+    /// Frontend treats it as "replace this session in the list by id".
+    SessionUpdated(SessionSummary),
     StatusChange {
         session_id: SessionId,
         status: Status,
@@ -179,30 +195,43 @@ impl SessionRegistryActor {
             session.claude_session_id = Some(claude_id.clone());
         }
         let new_status = match evt.hook_event_name.as_str() {
-            "SessionStart" => Status::Running,
+            "SessionStart" => Some(Status::Running),
             // Notification is overloaded: idle_prompt is the 60s reminder,
             // not a real "awaiting input" — must not pulse mint.
-            "Notification" => match evt.notification_kind {
+            "Notification" => Some(match evt.notification_kind {
                 Some(NotificationKind::IdlePrompt) => Status::Idle,
                 _ => Status::NeedsInput,
-            },
-            "Stop" => Status::Idle,
-            "SessionEnd" => Status::Exited,
-            _ => return,
+            }),
+            "Stop" => Some(Status::Idle),
+            "SessionEnd" => Some(Status::Exited),
+            _ => None,
         };
-        if session.status == new_status {
-            return;
+        if let Some(status) = new_status {
+            if session.status != status {
+                session.status = status;
+                let session_id = session.id.clone();
+                info!(session_id = %session_id, ?status, "hook updated session status");
+                emit(
+                    &self.events,
+                    RegistryEvent::StatusChange { session_id, status },
+                );
+            }
         }
-        session.status = new_status;
-        let session_id = session.id.clone();
-        info!(session_id = %session_id, ?new_status, "hook updated session status");
-        emit(
-            &self.events,
-            RegistryEvent::StatusChange {
-                session_id,
-                status: new_status,
-            },
-        );
+
+        // Idempotent rebucket: the `repo_name.is_none()` guard means
+        // subsequent events for the same session are no-ops, so the
+        // first match wins and a later `cd` elsewhere can't move it.
+        if session.repo_name.is_none() {
+            if let Some(repo) = evt.inferred_repo_name.as_deref() {
+                session.repo_name = Some(repo.to_owned());
+                session.title = claude_title(Some(repo));
+                info!(session_id = %session.id, repo, "rebucketed ad-hoc session into repo drawer");
+                emit(
+                    &self.events,
+                    RegistryEvent::SessionUpdated(session.to_summary()),
+                );
+            }
+        }
     }
 
     fn handle_spawn(
@@ -217,30 +246,19 @@ impl SessionRegistryActor {
         let (tx_evt, rx_evt) = mpsc::channel::<PtyEvent>(256);
         let handles = pty::spawn_pty(built.cmd, cols, rows, tx_evt)?;
 
-        let summary = SessionSummary {
+        let session = Session {
             id: id.clone(),
-            title: built.title.clone(),
+            title: built.title,
             status: Status::Running,
-            worktree_path: built.worktree_path.as_ref().map(|p| p.display().to_string()),
-            issue_url: built.issue_url.clone(),
-            branch: built.branch.clone(),
-            repo_name: built.repo_name.clone(),
+            handles,
+            claude_session_id: None,
+            worktree_path: built.worktree_path,
+            issue_url: built.issue_url,
+            branch: built.branch,
+            repo_name: built.repo_name,
         };
-
-        self.sessions.insert(
-            id.clone(),
-            Session {
-                id: id.clone(),
-                title: built.title,
-                status: Status::Running,
-                handles,
-                claude_session_id: None,
-                worktree_path: built.worktree_path,
-                issue_url: built.issue_url,
-                branch: built.branch,
-                repo_name: built.repo_name,
-            },
-        );
+        let summary = session.to_summary();
+        self.sessions.insert(id.clone(), session);
 
         spawn_pty_forwarder(self.events.clone(), id.clone(), rx_evt);
         emit(&self.events, RegistryEvent::SessionAdded(summary.clone()));
@@ -281,18 +299,7 @@ impl SessionRegistryActor {
     }
 
     fn snapshot(&self) -> Vec<SessionSummary> {
-        self.sessions
-            .values()
-            .map(|s| SessionSummary {
-                id: s.id.clone(),
-                title: s.title.clone(),
-                status: s.status,
-                worktree_path: s.worktree_path.as_ref().map(|p| p.display().to_string()),
-                issue_url: s.issue_url.clone(),
-                branch: s.branch.clone(),
-                repo_name: s.repo_name.clone(),
-            })
-            .collect()
+        self.sessions.values().map(Session::to_summary).collect()
     }
 }
 
