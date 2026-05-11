@@ -13,8 +13,12 @@ import { StatusDot } from "./StatusDot";
 function openNewScratchMenu(e: MouseEvent) {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
   openContextMenu({
-    x: rect.left,
+    // Anchor the menu's bottom-right corner just above the button's
+    // top-right corner, so the menu opens up-and-to-the-left and stays
+    // within the sidebar instead of spilling into the terminal area.
+    x: rect.right,
     y: rect.top - 4,
+    anchor: "bottom-right",
     items: [
       { label: "New Claude session (scratch)", action: () => void spawnClaude() },
       { label: "Debug bash", action: () => void spawnBash() },
