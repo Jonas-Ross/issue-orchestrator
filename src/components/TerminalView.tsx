@@ -33,8 +33,8 @@ export function TerminalView({ sessionId, active }: Props) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
-    // Initial fit — font may not be loaded yet; re-fit after fonts.ready.
-    fit.fit();
+    // Initial fit uses fallback monospace metrics; re-fit on fonts.ready below.
+    syncResize(sessionId, term, fit);
 
     term.onData((data) => {
       void commands.ptyWrite(sessionId, data);
@@ -43,12 +43,8 @@ export function TerminalView({ sessionId, active }: Props) {
     attachTerminal(sessionId, term);
     refs.current = { term, fit };
 
-    // Initial size sync to backend.
-    void commands.ptyResize(sessionId, term.cols, term.rows);
-
-    // Re-fit once the document fonts have loaded so that Menlo's true cell
-    // height is used rather than the fallback monospace metrics.  If fonts
-    // were already ready this resolves in the same microtask queue turn.
+    // Re-fit with Menlo's true cell height once fonts load (resolves
+    // immediately if already loaded).
     void document.fonts.ready.then(() => {
       if (!refs.current) return;
       syncResize(sessionId, refs.current.term, refs.current.fit);
@@ -69,7 +65,8 @@ export function TerminalView({ sessionId, active }: Props) {
   useEffect(() => {
     if (!active) return;
     const r = refs.current;
-    if (!r) return;
+    const host = hostRef.current;
+    if (!r || !host) return;
 
     // Re-fit after the display:none → block transition has been laid out.
     const rafId = requestAnimationFrame(() => {
@@ -82,7 +79,7 @@ export function TerminalView({ sessionId, active }: Props) {
       if (!refs.current) return;
       syncResize(sessionId, refs.current.term, refs.current.fit);
     });
-    ro.observe(hostRef.current as Element);
+    ro.observe(host);
 
     return () => {
       cancelAnimationFrame(rafId);
