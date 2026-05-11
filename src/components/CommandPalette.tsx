@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { commands } from "../lib/bindings";
+import { spawnBash } from "../lib/spawn-bash";
+import { spawnClaude } from "../lib/spawn-claude";
 import { activeId, sessions } from "../state/sessions";
 import { openPicker } from "../state/picker";
 import { closePalette, paletteOpen } from "../state/palette";
+import { repos } from "../state/repos";
 import { Modal } from "./Modal";
 
 interface PaletteAction {
@@ -34,6 +37,33 @@ export function CommandPalette() {
         openPicker();
       },
     });
+    out.push({
+      id: "new-claude-scratch",
+      label: "New Claude session (scratch)",
+      run: () => {
+        closePalette();
+        void spawnClaude();
+      },
+    });
+    for (const r of repos.value) {
+      out.push({
+        id: `new-claude-${r.name}`,
+        label: `New Claude session in ${r.name}`,
+        run: () => {
+          closePalette();
+          void spawnClaude(r.name);
+        },
+      });
+    }
+    out.push({
+      id: "new-bash",
+      label: "Debug bash",
+      hint: "⌘⇧B",
+      run: () => {
+        closePalette();
+        void spawnBash();
+      },
+    });
     if (activeId.value) {
       out.push({
         id: "kill-active",
@@ -60,9 +90,9 @@ export function CommandPalette() {
     return out;
     // Reading `signal.value` inside the memo IS the reactive subscription
     // we want; oxlint's react-hooks/exhaustive-deps doesn't recognize that
-    // pattern and flags `sessions` / `activeId` as unnecessary.
+    // pattern and flags `sessions` / `activeId` / `repos` as unnecessary.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions.value, activeId.value]);
+  }, [sessions.value, activeId.value, repos.value]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

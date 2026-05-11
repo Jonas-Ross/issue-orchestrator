@@ -4,6 +4,7 @@ import { CommandPalette } from "../CommandPalette";
 import { paletteOpen, closePalette } from "../../state/palette";
 import { pickerOpen } from "../../state/picker";
 import { sessions, activeId, addSession, removeSession } from "../../state/sessions";
+import { repos } from "../../state/repos";
 import { makeSession } from "../../test/factories";
 
 beforeEach(() => {
@@ -11,6 +12,7 @@ beforeEach(() => {
   pickerOpen.value = null;
   for (const s of [...sessions.value]) removeSession(s.id);
   activeId.value = null;
+  repos.value = [];
 });
 
 describe("<CommandPalette />", () => {
@@ -111,6 +113,96 @@ describe("<CommandPalette />", () => {
     render(<CommandPalette />);
     fireEvent.click(screen.getByText(/Kill active session/));
     expect(killedId).toBe("s1");
+    expect(paletteOpen.value).toBe(false);
+  });
+
+  it("offers 'New Claude session (scratch)' and 'Debug bash' actions", () => {
+    mockCommands({});
+    paletteOpen.value = true;
+    render(<CommandPalette />);
+    expect(screen.getByText(/New Claude session \(scratch\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Debug bash/i)).toBeInTheDocument();
+  });
+
+  it("clicking 'New Claude session (scratch)' calls claude_spawn with null repoName", () => {
+    const calls: Array<{ repoName: string | null }> = [];
+    mockCommands({
+      claude_spawn: (args: { repoName: string | null }) => {
+        calls.push({ repoName: args.repoName });
+        return {
+          id: "fake",
+          title: "Claude",
+          status: "running",
+          worktreePath: null,
+          issueUrl: null,
+          branch: null,
+          repoName: null,
+        };
+      },
+    });
+    paletteOpen.value = true;
+    render(<CommandPalette />);
+    fireEvent.click(screen.getByText(/New Claude session \(scratch\)/i));
+    expect(calls).toEqual([{ repoName: null }]);
+    expect(paletteOpen.value).toBe(false);
+  });
+
+  it("lists a 'New Claude session in <repo>' action per registered repo", () => {
+    mockCommands({});
+    repos.value = [
+      { name: "alpha", path: "/p/alpha" },
+      { name: "beta", path: "/p/beta" },
+    ];
+    paletteOpen.value = true;
+    render(<CommandPalette />);
+    expect(screen.getByText(/New Claude session in alpha/i)).toBeInTheDocument();
+    expect(screen.getByText(/New Claude session in beta/i)).toBeInTheDocument();
+  });
+
+  it("clicking a per-repo Claude action passes the repo name to claude_spawn", () => {
+    const calls: Array<{ repoName: string | null }> = [];
+    mockCommands({
+      claude_spawn: (args: { repoName: string | null }) => {
+        calls.push({ repoName: args.repoName });
+        return {
+          id: "fake",
+          title: `Claude · ${args.repoName}`,
+          status: "running",
+          worktreePath: null,
+          issueUrl: null,
+          branch: null,
+          repoName: args.repoName,
+        };
+      },
+    });
+    repos.value = [{ name: "alpha", path: "/p/alpha" }];
+    paletteOpen.value = true;
+    render(<CommandPalette />);
+    fireEvent.click(screen.getByText(/New Claude session in alpha/i));
+    expect(calls).toEqual([{ repoName: "alpha" }]);
+    expect(paletteOpen.value).toBe(false);
+  });
+
+  it("clicking 'Debug bash' calls pty_spawn", () => {
+    let spawned = false;
+    mockCommands({
+      pty_spawn: () => {
+        spawned = true;
+        return {
+          id: "bash",
+          title: "bash",
+          status: "running",
+          worktreePath: null,
+          issueUrl: null,
+          branch: null,
+          repoName: null,
+        };
+      },
+    });
+    paletteOpen.value = true;
+    render(<CommandPalette />);
+    fireEvent.click(screen.getByText(/Debug bash/i));
+    expect(spawned).toBe(true);
     expect(paletteOpen.value).toBe(false);
   });
 });
