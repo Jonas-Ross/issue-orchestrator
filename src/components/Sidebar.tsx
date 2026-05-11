@@ -1,13 +1,26 @@
 import { spawnBash } from "../lib/spawn-bash";
+import { spawnClaude } from "../lib/spawn-claude";
 import { sessions, sessionsByRepo, SHELL_BUCKET } from "../state/sessions";
 import { repos } from "../state/repos";
 import { sidebarCollapsed, toggleSidebar } from "../state/sidebar";
 import { openSettings } from "../state/settings";
+import { openContextMenu } from "../state/context-menu";
 import { SidebarRow } from "./SidebarRow";
 import { RepoDrawer } from "./RepoDrawer";
 import { AddRepoButton } from "./AddRepoButton";
-import { NewClaudeButton } from "./NewClaudeButton";
 import { StatusDot } from "./StatusDot";
+
+function openNewScratchMenu(e: MouseEvent) {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  openContextMenu({
+    x: rect.left,
+    y: rect.top - 4,
+    items: [
+      { label: "New Claude session (scratch)", action: () => void spawnClaude() },
+      { label: "Debug bash", action: () => void spawnBash() },
+    ],
+  });
+}
 
 export function Sidebar() {
   const collapsed = sidebarCollapsed.value;
@@ -41,14 +54,13 @@ export function Sidebar() {
             <SidebarRow key={s.id} session={s} collapsed />
           ))}
         </div>
-        <NewClaudeButton className="sb-iconbtn sb-claude" />
         <button
           type="button"
-          class="sb-iconbtn sb-shell"
-          title="Debug bash (⌘⇧B)"
-          onClick={() => void spawnBash()}
+          class="sb-iconbtn sb-new"
+          title="New scratch session"
+          onClick={openNewScratchMenu}
         >
-          ⌘
+          ＋
         </button>
       </aside>
     );
@@ -133,14 +145,13 @@ export function Sidebar() {
         >
           ⚙
         </button>
-        <NewClaudeButton className="sb-footer-btn sb-action-claude" />
         <button
           type="button"
-          class="sb-footer-btn sb-action-shell"
-          title="Debug bash (⌘⇧B)"
-          onClick={() => void spawnBash()}
+          class="sb-footer-btn sb-action-new"
+          title="New scratch session"
+          onClick={openNewScratchMenu}
         >
-          ⌘
+          ＋
         </button>
       </footer>
     </aside>

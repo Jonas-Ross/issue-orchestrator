@@ -232,20 +232,6 @@ select:focus-visible {
 .sb-action-label {
   flex: 1;
 }
-.sb-action-shell {
-  width: 38px;
-  background: transparent;
-  border: none;
-  border-left: 1px solid var(--line-1);
-  color: var(--text-2);
-  font-size: 12px;
-  cursor: pointer;
-  font-family: var(--font-mono);
-}
-.sb-action-shell:hover {
-  background: var(--bg-elev);
-  color: var(--text-1);
-}
 
 /* Collapsed icon buttons */
 .sb-iconbtn {
@@ -262,17 +248,13 @@ select:focus-visible {
   background: var(--bg-elev);
   color: var(--text-1);
 }
-/* Scratch Claude button in the collapsed icon column. Takes over the
-   bottom-anchor role that `.sb-shell` used to play — the ✦ button is
-   inserted above `⌘`, so the auto-margin now lives here. */
-.sb-claude {
+/* Bottom-anchored "+ new session" button in the collapsed icon column.
+   Opens a small menu (Claude scratch / debug bash). */
+.sb-new {
   border-bottom: none;
   border-top: 1px solid var(--line-1);
   margin-top: auto;
-}
-.sb-shell {
-  border-bottom: none;
-  font-size: 13px;
+  font-size: 14px;
 }
 .sb-needs-pill {
   margin: 6px auto 0;
@@ -335,17 +317,11 @@ select:focus-visible {
   background: var(--bg-elev);
   color: var(--text-1);
 }
-/* Override leftover top-bar styling on the shell button when used in the
-   footer (it had width:38px + border-left from its old location). */
-.sb-footer .sb-action-shell {
-  border-left: none;
-  width: 28px;
-}
-/* Scratch Claude footer button. The base `.sb-footer-btn` already
-   gives it the right dimensions; this hook is here so future tweaks
-   (color, weight) have somewhere to land. */
-.sb-action-claude {
-  font-size: 13px;
+/* Footer "+ new session" button hook. The base `.sb-footer-btn` already
+   gives it dimensions; this rule is here so future tweaks (color,
+   weight) have somewhere to land. */
+.sb-action-new {
+  font-size: 14px;
 }
 
 /* ── Sidebar row ─────────────────────────────────────────────────────── */
@@ -1261,8 +1237,7 @@ a.issue-number:hover {
   font-size: 10.5px;
   text-align: center;
 }
-.repo-drawer-new,
-.repo-drawer-claude {
+.repo-drawer-new {
   background: transparent;
   border: 1px solid var(--line-2);
   border-radius: var(--radius-2);
@@ -1274,11 +1249,7 @@ a.issue-number:hover {
   padding: 0;
   line-height: 1;
 }
-.repo-drawer-claude {
-  font-size: 12px;
-}
-.repo-drawer-new:hover,
-.repo-drawer-claude:hover {
+.repo-drawer-new:hover {
   background: var(--bg-elev2);
   color: var(--text-1);
   border-color: var(--accent-dim);
