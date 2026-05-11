@@ -16,15 +16,23 @@ interface PaletteAction {
 }
 
 export function CommandPalette() {
-  if (!paletteOpen.value) return null;
-
+  const open = paletteOpen.value;
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Re-fire on every open transition so subsequent opens of the same
+  // component instance still autofocus and start from a clean query.
+  // Empty-deps `useEffect(..., [])` only fires once per mount, and
+  // Preact keeps this component instance around across open/close
+  // toggles, which is why earlier opens worked but later ones didn't.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (open) {
+      setQuery("");
+      setActiveIdx(0);
+      inputRef.current?.focus();
+    }
+  }, [open]);
 
   const all: PaletteAction[] = useMemo(() => {
     const out: PaletteAction[] = [];
@@ -125,6 +133,8 @@ export function CommandPalette() {
       filtered[activeIdx]?.run();
     }
   };
+
+  if (!open) return null;
 
   return (
     <Modal onClose={() => closePalette()} style={{ width: 480 }}>

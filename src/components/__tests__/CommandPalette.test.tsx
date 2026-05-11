@@ -29,6 +29,24 @@ describe("<CommandPalette />", () => {
     expect(screen.getByPlaceholderText(/Switch session, run command/i)).toBeInTheDocument();
   });
 
+  it("focuses the input on every open, not just the first one", () => {
+    mockCommands({});
+    paletteOpen.value = true;
+    const { rerender } = render(<CommandPalette />);
+    const firstOpenInput = screen.getByPlaceholderText(/Switch session/i);
+    expect(document.activeElement).toBe(firstOpenInput);
+
+    // Close, then reopen against the same mounted component instance —
+    // an empty-deps useEffect would only fire once; this test guards
+    // that the autofocus effect actually re-fires.
+    closePalette();
+    rerender(<CommandPalette />);
+    paletteOpen.value = true;
+    rerender(<CommandPalette />);
+    const reopenedInput = screen.getByPlaceholderText(/Switch session/i);
+    expect(document.activeElement).toBe(reopenedInput);
+  });
+
   it("always offers the 'New issue session' action", () => {
     mockCommands({});
     paletteOpen.value = true;
