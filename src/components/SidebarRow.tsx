@@ -49,6 +49,7 @@ export function SidebarRow({ session, collapsed }: Props) {
   const onReplyKeyDown = (e: KeyboardEvent) => {
     e.stopPropagation();
     if (e.key === "Enter") {
+      if (e.isComposing) return;
       const text = replyValue;
       setReplyValue("");
       void commands.ptyWrite(session.id, text + "\n");
