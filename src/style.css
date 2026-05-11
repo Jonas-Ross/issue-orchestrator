@@ -567,8 +567,11 @@ select:focus-visible {
 }
 .terminal-host {
   position: absolute;
-  inset: 0;
-  padding: 8px;
+  /* inset (not padding): FitAddon's row math reads
+     getComputedStyle(host).height but only subtracts padding from the
+     .xterm child, not the host itself — so host padding overcounts
+     rows and clips the bottom row behind the status bar. */
+  inset: 8px;
 }
 
 /* ── Status bar (bottom) ─────────────────────────────────────────────── */
