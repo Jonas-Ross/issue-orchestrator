@@ -262,10 +262,16 @@ select:focus-visible {
   background: var(--bg-elev);
   color: var(--text-1);
 }
-.sb-shell {
+/* Scratch Claude button in the collapsed icon column. Takes over the
+   bottom-anchor role that `.sb-shell` used to play — the ✦ button is
+   inserted above `⌘`, so the auto-margin now lives here. */
+.sb-claude {
   border-bottom: none;
   border-top: 1px solid var(--line-1);
   margin-top: auto;
+}
+.sb-shell {
+  border-bottom: none;
   font-size: 13px;
 }
 .sb-needs-pill {
@@ -334,6 +340,12 @@ select:focus-visible {
 .sb-footer .sb-action-shell {
   border-left: none;
   width: 28px;
+}
+/* Scratch Claude footer button. The base `.sb-footer-btn` already
+   gives it the right dimensions; this hook is here so future tweaks
+   (color, weight) have somewhere to land. */
+.sb-action-claude {
+  font-size: 13px;
 }
 
 /* ── Sidebar row ─────────────────────────────────────────────────────── */
@@ -1249,7 +1261,8 @@ a.issue-number:hover {
   font-size: 10.5px;
   text-align: center;
 }
-.repo-drawer-new {
+.repo-drawer-new,
+.repo-drawer-claude {
   background: transparent;
   border: 1px solid var(--line-2);
   border-radius: var(--radius-2);
@@ -1261,7 +1274,11 @@ a.issue-number:hover {
   padding: 0;
   line-height: 1;
 }
-.repo-drawer-new:hover {
+.repo-drawer-claude {
+  font-size: 12px;
+}
+.repo-drawer-new:hover,
+.repo-drawer-claude:hover {
   background: var(--bg-elev2);
   color: var(--text-1);
   border-color: var(--accent-dim);
