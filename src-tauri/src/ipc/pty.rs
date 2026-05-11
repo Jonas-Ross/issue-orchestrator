@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tauri::State;
 use tokio::sync::oneshot;
 
-use crate::registry::{RegistryCmd, SessionId, SessionSummary, SpawnSpec};
+use crate::registry::{claude_title, RegistryCmd, SessionId, SessionSummary, SpawnSpec};
 
 use super::AppState;
 
@@ -42,20 +42,17 @@ pub async fn claude_spawn(
     cols: u16,
     rows: u16,
 ) -> Result<SessionSummary, String> {
-    let (cwd, title) = match &repo_name {
+    // Lookup errors are surfaced directly: a name passed from the
+    // frontend always comes from `repos.value`, so a miss is a real
+    // bug rather than something to mask with $HOME.
+    let cwd = match &repo_name {
         Some(name) => {
-            // Surface lookup errors directly: a name passed from the
-            // frontend always comes from `repos.value`, so a miss is
-            // a real bug worth seeing rather than masking with $HOME.
             let repo = state.config.lookup_repo(name).await.map_err(|e| e.to_string())?;
-            (PathBuf::from(repo.path), format!("Claude · {name}"))
+            PathBuf::from(repo.path)
         }
-        None => {
-            let home = std::env::var("HOME")
-                .map_err(|e| format!("HOME env var: {e}"))?;
-            (PathBuf::from(home), "Claude".to_owned())
-        }
+        None => PathBuf::from(std::env::var("HOME").map_err(|e| format!("HOME env var: {e}"))?),
     };
+    let title = claude_title(repo_name.as_deref());
 
     let (tx, rx) = oneshot::channel();
     state

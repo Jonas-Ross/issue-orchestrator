@@ -5,6 +5,8 @@ pub mod status;
 #[cfg(test)]
 mod tests;
 
+pub use self::builder::claude_title;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -216,16 +218,13 @@ impl SessionRegistryActor {
             }
         }
 
-        // cwd-inferred rebucket: an ad-hoc Claude session (or a debug
-        // shell that the user ran `claude` inside) starts with no
-        // `repo_name`. Once we see any hook event whose cwd resolves
-        // to a tracked repo, move the session into that repo's drawer
-        // and retitle. Idempotent — the `repo_name.is_none()` guard
-        // means subsequent events for the same session are no-ops.
+        // Idempotent rebucket: the `repo_name.is_none()` guard means
+        // subsequent events for the same session are no-ops, so the
+        // first match wins and a later `cd` elsewhere can't move it.
         if session.repo_name.is_none() {
             if let Some(repo) = evt.inferred_repo_name.as_deref() {
                 session.repo_name = Some(repo.to_owned());
-                session.title = format!("Claude · {repo}");
+                session.title = claude_title(Some(repo));
                 info!(session_id = %session.id, repo, "rebucketed ad-hoc session into repo drawer");
                 emit(
                     &self.events,

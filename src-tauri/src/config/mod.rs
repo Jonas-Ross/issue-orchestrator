@@ -159,6 +159,12 @@ impl Config {
     /// path. `strip_prefix` matches at component boundaries, so
     /// `/a/foo-bar` correctly does not match a repo at `/a/foo`.
     pub fn repo_containing_path(&self, path: &str) -> Option<RepoEntry> {
+        // First-launch shortcut: skip the canonicalize syscall when no
+        // repos can possibly match. Hook events fire ~5-10×/session, so
+        // this matters before the user finishes initial setup.
+        if self.repos.is_empty() {
+            return None;
+        }
         let canonical = std::fs::canonicalize(path)
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| path.to_owned());

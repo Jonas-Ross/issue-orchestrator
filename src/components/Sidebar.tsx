@@ -1,5 +1,4 @@
 import { spawnBash } from "../lib/spawn-bash";
-import { spawnClaude } from "../lib/spawn-claude";
 import { sessions, sessionsByRepo, SHELL_BUCKET } from "../state/sessions";
 import { repos } from "../state/repos";
 import { sidebarCollapsed, toggleSidebar } from "../state/sidebar";
@@ -7,6 +6,7 @@ import { openSettings } from "../state/settings";
 import { SidebarRow } from "./SidebarRow";
 import { RepoDrawer } from "./RepoDrawer";
 import { AddRepoButton } from "./AddRepoButton";
+import { NewClaudeButton } from "./NewClaudeButton";
 import { StatusDot } from "./StatusDot";
 
 export function Sidebar() {
@@ -41,14 +41,7 @@ export function Sidebar() {
             <SidebarRow key={s.id} session={s} collapsed />
           ))}
         </div>
-        <button
-          type="button"
-          class="sb-iconbtn sb-claude"
-          title="New Claude session (scratch)"
-          onClick={() => void spawnClaude()}
-        >
-          ✦
-        </button>
+        <NewClaudeButton className="sb-iconbtn sb-claude" />
         <button
           type="button"
           class="sb-iconbtn sb-shell"
@@ -140,14 +133,7 @@ export function Sidebar() {
         >
           ⚙
         </button>
-        <button
-          type="button"
-          class="sb-footer-btn sb-action-claude"
-          title="New Claude session (scratch)"
-          onClick={() => void spawnClaude()}
-        >
-          ✦
-        </button>
+        <NewClaudeButton className="sb-footer-btn sb-action-claude" />
         <button
           type="button"
           class="sb-footer-btn sb-action-shell"
