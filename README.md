@@ -270,7 +270,8 @@ After `cargo tauri dev`:
 
 1. Window opens; sidebar empty.
 2. ⌘⇧B → a `bash` session appears, prompt within ~1s. Type, ctrl-c,
-   resize the window — the terminal reflows without garbage.
+   resize the window or collapse the sidebar — the terminal reflows
+   without garbage.
 3. ⌘⇧B again → second session; ⌘1 / ⌘2 toggles, both keep scrollback.
 4. ⌘W → PTY killed, no orphaned `bash` in `ps aux`.
 5. Configure a repo (Settings → Repos), then ⌘N → pick an issue. A
