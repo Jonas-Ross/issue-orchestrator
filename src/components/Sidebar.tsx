@@ -1,4 +1,5 @@
 import { spawnBash } from "../lib/spawn-bash";
+import { spawnClaude } from "../lib/spawn-claude";
 import { sessions, sessionsByRepo, SHELL_BUCKET } from "../state/sessions";
 import { repos } from "../state/repos";
 import { sidebarCollapsed, toggleSidebar } from "../state/sidebar";
@@ -40,6 +41,14 @@ export function Sidebar() {
             <SidebarRow key={s.id} session={s} collapsed />
           ))}
         </div>
+        <button
+          type="button"
+          class="sb-iconbtn sb-claude"
+          title="New Claude session (scratch)"
+          onClick={() => void spawnClaude()}
+        >
+          ✦
+        </button>
         <button
           type="button"
           class="sb-iconbtn sb-shell"
@@ -103,7 +112,7 @@ export function Sidebar() {
               <div class="repo-drawer expanded shell-drawer">
                 <div class="repo-drawer-header">
                   <span class="repo-drawer-caret">▾</span>
-                  <span class="repo-drawer-name">Debug shells</span>
+                  <span class="repo-drawer-name">Other sessions</span>
                   <span class="repo-drawer-count">{shellSessions.length}</span>
                 </div>
                 <div class="repo-drawer-body">
@@ -130,6 +139,14 @@ export function Sidebar() {
           onClick={() => openSettings()}
         >
           ⚙
+        </button>
+        <button
+          type="button"
+          class="sb-footer-btn sb-action-claude"
+          title="New Claude session (scratch)"
+          onClick={() => void spawnClaude()}
+        >
+          ✦
         </button>
         <button
           type="button"

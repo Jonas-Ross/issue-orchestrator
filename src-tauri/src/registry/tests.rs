@@ -3,6 +3,8 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 
+use crate::hooks::HookEvent;
+
 use super::{
     RegistryCmd, RegistryEvent, SessionRegistryActor, SessionSummary, SpawnSpec, Status,
 };
@@ -122,6 +124,118 @@ async fn write_to_unknown_session_errors() {
 
     let result = reply_rx.await.expect("Write reply");
     assert!(result.is_err(), "expected SessionNotFound, got {:?}", result);
+}
+
+fn hook_with_inferred(orch_id: &str, event_name: &str, repo: Option<&str>) -> HookEvent {
+    HookEvent {
+        hook_event_name: event_name.to_owned(),
+        session_orch_id: Some(orch_id.to_owned()),
+        claude_session_id: Some("claude-fake-uuid".into()),
+        cwd: Some("/fake/cwd".into()),
+        transcript_path: None,
+        notification_kind: None,
+        inferred_repo_name: repo.map(str::to_owned),
+        raw: serde_json::json!({}),
+    }
+}
+
+#[tokio::test]
+async fn unbucketed_session_rebuckets_on_hook_with_inferred_repo() {
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let cmd_tx = SessionRegistryActor::spawn(event_tx);
+
+    // Bash spawn produces a session with repo_name=None — the exact
+    // shape the rebucket logic is written for. (Using bash avoids
+    // needing `claude` on PATH in CI.)
+    let summary = spawn_bash(&cmd_tx, 80, 24).await;
+    assert!(summary.repo_name.is_none());
+
+    cmd_tx
+        .send(RegistryCmd::HookEvent(hook_with_inferred(
+            &summary.id,
+            "SessionStart",
+            Some("alpha"),
+        )))
+        .await
+        .expect("send hook");
+
+    let updated = wait_for(&mut event_rx, |e| {
+        matches!(e, RegistryEvent::SessionUpdated(_))
+    })
+    .await;
+    match updated {
+        RegistryEvent::SessionUpdated(s) => {
+            assert_eq!(s.id, summary.id);
+            assert_eq!(s.repo_name.as_deref(), Some("alpha"));
+            assert_eq!(s.title, "Claude · alpha");
+        }
+        _ => unreachable!(),
+    }
+
+    // List should also reflect the new shape.
+    let listed = list(&cmd_tx).await;
+    assert_eq!(listed[0].repo_name.as_deref(), Some("alpha"));
+    assert_eq!(listed[0].title, "Claude · alpha");
+
+    kill(&cmd_tx, &summary.id).await;
+}
+
+#[tokio::test]
+async fn rebucket_is_idempotent_after_first_hook() {
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let cmd_tx = SessionRegistryActor::spawn(event_tx);
+
+    let summary = spawn_bash(&cmd_tx, 80, 24).await;
+
+    // First hook rebuckets into alpha.
+    cmd_tx
+        .send(RegistryCmd::HookEvent(hook_with_inferred(
+            &summary.id,
+            "SessionStart",
+            Some("alpha"),
+        )))
+        .await
+        .expect("first hook");
+    let _ = wait_for(&mut event_rx, |e| {
+        matches!(e, RegistryEvent::SessionUpdated(_))
+    })
+    .await;
+
+    // Second hook arrives with a *different* inferred repo — must NOT
+    // re-rebucket; the existing repo_name guard makes this a no-op.
+    cmd_tx
+        .send(RegistryCmd::HookEvent(hook_with_inferred(
+            &summary.id,
+            "Notification",
+            Some("beta"),
+        )))
+        .await
+        .expect("second hook");
+
+    // We may see a StatusChange (Notification → NeedsInput), but no
+    // SessionUpdated should follow within a short window.
+    let no_update = timeout(Duration::from_millis(300), async {
+        loop {
+            match event_rx.recv().await.expect("event channel closed") {
+                RegistryEvent::SessionUpdated(_) => return false,
+                _ => continue,
+            }
+        }
+    })
+    .await;
+    assert!(
+        no_update.is_err(),
+        "expected no further SessionUpdated, but one arrived"
+    );
+
+    let listed = list(&cmd_tx).await;
+    assert_eq!(
+        listed[0].repo_name.as_deref(),
+        Some("alpha"),
+        "session must stay in alpha; second hook with beta is ignored"
+    );
+
+    kill(&cmd_tx, &summary.id).await;
 }
 
 #[tokio::test]

@@ -50,9 +50,13 @@ publishes `RegistryEvent`s on an unbounded mpsc; it never touches `AppHandle`.
 
 `ipc::spawn_event_bridge` is the only thing that knows how to translate a
 `RegistryEvent` into a typed Tauri event (`PtyData`, `SessionAdded`,
-`SessionRemoved`, `StatusChange`). This is what lets the registry, hook
-receiver, and spawn flow be unit-tested without a Tauri runtime — tests
-subscribe to `RegistryEvent` directly.
+`SessionRemoved`, `SessionUpdated`, `StatusChange`). `SessionUpdated`
+carries a full `SessionSummary` and is emitted when an ad-hoc Claude
+session is rebucketed into a repo drawer via cwd inference (see "Hook
+bridge" below) — the frontend reducer treats it as "replace by id".
+This is what lets the registry, hook receiver, and spawn flow be
+unit-tested without a Tauri runtime — tests subscribe to
+`RegistryEvent` directly.
 
 The 20-odd `#[tauri::command]` functions are split across
 `ipc/{pty,setup,repos,issues,secrets}.rs` by domain; `mod.rs` owns only
@@ -80,6 +84,14 @@ see it. Commands are referenced by their full path
 (`ipc::pty::pty_spawn`, `ipc::issues::list_issues`, …) because
 `tauri-specta`'s macro generates a sibling `__specta__fn__X` that doesn't
 follow `pub use` re-exports.
+
+There are three spawn entry points on the IPC surface:
+`ipc::pty::pty_spawn` (`SpawnSpec::Bash` — diagnostic shell, no repo
+affinity), `ipc::pty::claude_spawn` (`SpawnSpec::ClaudeAdHoc` — scratch
+`claude` with no prompt; per-repo button passes the repo name to bucket
+under that drawer, footer button passes `None` for an unbucketed
+session), and `ipc::issues::spawn_issue_session` (`SpawnSpec::Claude` —
+issue-team flow with worktree, branch, and prompt template).
 
 ### Typed errors (`src-tauri/src/error.rs`)
 
@@ -122,6 +134,20 @@ Correlation key is **`ISSUE_ORCH_SESSION_ID`** (env var injected by
 `apply_common_env` in `registry/builder.rs` at PTY spawn time), not `cwd`
 — so the user can `cd` freely without breaking status. Without `jq`
 installed, the listener still parses payloads but correlation is lost.
+
+`cwd` is used for a secondary purpose: ad-hoc Claude rebucketing.
+When a session was spawned without a `repo_name` — e.g. via the
+footer "scratch Claude" or "debug bash" buttons — `hooks::run_listener`
+asks the injected `RepoLookup` (a `ConfigHandle` in production) to
+resolve the hook's `cwd` to a tracked repo. If a match is found the
+listener stuffs the result into `HookEvent.inferred_repo_name` before
+forwarding to the actor, which mutates `session.repo_name` +
+`session.title` and emits `RegistryEvent::SessionUpdated` so the
+sidebar moves the row into the matching repo drawer. The rebucket is
+guarded by `repo_name.is_none()` so it's idempotent: once a session
+is bucketed, subsequent hooks (even with different cwds) don't move
+it. `RepoLookup` is a small trait so `hooks/tests.rs` can plug in a
+fake without spinning a real config actor.
 
 The same `apply_common_env` runs every inherited env var through
 `should_drop_env` and strips credential-shaped names (`AWS_*`,

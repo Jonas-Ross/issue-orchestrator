@@ -51,6 +51,7 @@ fn forward(app: &AppHandle, evt: RegistryEvent) -> tauri::Result<()> {
         RegistryEvent::SessionRemoved { session_id } => {
             events::SessionRemoved { session_id }.emit(app)
         }
+        RegistryEvent::SessionUpdated(summary) => events::SessionUpdated(summary).emit(app),
         RegistryEvent::StatusChange { session_id, status } => {
             events::StatusChange { session_id, status }.emit(app)
         }

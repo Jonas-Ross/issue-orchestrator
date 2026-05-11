@@ -59,6 +59,23 @@ pub(super) fn build_command(orch_id: &str, spec: SpawnSpec) -> Result<BuiltComma
                 repo_name: Some(repo_name),
             })
         }
+        SpawnSpec::ClaudeAdHoc {
+            cwd,
+            title,
+            repo_name,
+        } => {
+            let mut cmd = CommandBuilder::new("claude");
+            apply_common_env(&mut cmd, orch_id);
+            cmd.cwd(&cwd);
+            Ok(BuiltCommand {
+                cmd,
+                title,
+                worktree_path: None,
+                issue_url: None,
+                branch: None,
+                repo_name,
+            })
+        }
     }
 }
 

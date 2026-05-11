@@ -83,6 +83,7 @@ fn fake_registry(
                     id: "fake-session-id".into(),
                     title: match &spec {
                         SpawnSpec::Claude { title, .. } => title.clone(),
+                        SpawnSpec::ClaudeAdHoc { title, .. } => title.clone(),
                         SpawnSpec::Bash => "bash".into(),
                     },
                     status: crate::registry::Status::Running,
@@ -90,18 +91,19 @@ fn fake_registry(
                         SpawnSpec::Claude { worktree_path, .. } => {
                             Some(worktree_path.display().to_string())
                         }
-                        SpawnSpec::Bash => None,
+                        SpawnSpec::ClaudeAdHoc { .. } | SpawnSpec::Bash => None,
                     },
                     issue_url: match &spec {
                         SpawnSpec::Claude { issue_url, .. } => issue_url.clone(),
-                        SpawnSpec::Bash => None,
+                        SpawnSpec::ClaudeAdHoc { .. } | SpawnSpec::Bash => None,
                     },
                     branch: match &spec {
                         SpawnSpec::Claude { branch, .. } => branch.clone(),
-                        SpawnSpec::Bash => None,
+                        SpawnSpec::ClaudeAdHoc { .. } | SpawnSpec::Bash => None,
                     },
                     repo_name: match &spec {
                         SpawnSpec::Claude { repo_name, .. } => Some(repo_name.clone()),
+                        SpawnSpec::ClaudeAdHoc { repo_name, .. } => repo_name.clone(),
                         SpawnSpec::Bash => None,
                     },
                 };

@@ -4,6 +4,7 @@ import { openContextMenu } from "../state/context-menu";
 import type { ContextMenuItem } from "../state/context-menu";
 import type { RepoEntry, SessionSummary } from "../lib/bindings";
 import { copyToClipboard } from "../lib/clipboard";
+import { spawnClaude } from "../lib/spawn-claude";
 import { SidebarRow } from "./SidebarRow";
 
 interface Props {
@@ -60,8 +61,19 @@ export function RepoDrawer({ repo, sessions }: Props) {
         </span>
         <button
           type="button"
+          class="repo-drawer-claude"
+          title={`New Claude session in ${repo.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            void spawnClaude(repo.name);
+          }}
+        >
+          ✦
+        </button>
+        <button
+          type="button"
           class="repo-drawer-new"
-          title={`New session in ${repo.name}`}
+          title={`New issue session in ${repo.name}`}
           onClick={(e) => {
             e.stopPropagation();
             openPicker(repo.name);

@@ -151,6 +151,31 @@ impl Config {
         Ok(())
     }
 
+    /// Find the `RepoEntry` whose stored path is the longest path-boundary
+    /// prefix of `path`. Canonicalizes `path` so macOS `/var` →
+    /// `/private/var` symlink quirks don't miss; on canonicalize failure
+    /// (path no longer exists, etc.) falls back to the raw input rather
+    /// than dropping the lookup. Returns `None` if no repo contains the
+    /// path. `strip_prefix` matches at component boundaries, so
+    /// `/a/foo-bar` correctly does not match a repo at `/a/foo`.
+    pub fn repo_containing_path(&self, path: &str) -> Option<RepoEntry> {
+        let canonical = std::fs::canonicalize(path)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| path.to_owned());
+        let target = Path::new(&canonical);
+        self.repos
+            .iter()
+            .filter_map(|r| {
+                let repo_path = Path::new(&r.path);
+                target
+                    .strip_prefix(repo_path)
+                    .ok()
+                    .map(|_| (repo_path.components().count(), r.clone()))
+            })
+            .max_by_key(|(depth, _)| *depth)
+            .map(|(_, r)| r)
+    }
+
     /// Replace the issue provider for a named repo. Returns the updated
     /// entry. Errors if no repo by that name exists. The IPC layer is
     /// responsible for refusing this when the repo has live sessions —
@@ -369,5 +394,116 @@ mod tests {
         let mut config = empty_config();
         let entry = config.add_repo(dir.path()).unwrap();
         assert_eq!(entry.provider, IssueProvider::Github);
+    }
+
+    fn config_with_repo(name: &str, path: &str) -> Config {
+        let mut c = empty_config();
+        c.repos.push(RepoEntry {
+            name: name.into(),
+            path: path.into(),
+            provider: IssueProvider::default(),
+        });
+        c
+    }
+
+    #[test]
+    fn repo_containing_path_exact_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let canonical = std::fs::canonicalize(dir.path()).unwrap();
+        let config = config_with_repo("alpha", &canonical.display().to_string());
+        let m = config
+            .repo_containing_path(&canonical.display().to_string())
+            .expect("expected match");
+        assert_eq!(m.name, "alpha");
+    }
+
+    #[test]
+    fn repo_containing_path_nested_dir_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let canonical = std::fs::canonicalize(dir.path()).unwrap();
+        let nested = canonical.join("src").join("lib");
+        std::fs::create_dir_all(&nested).unwrap();
+        let config = config_with_repo("alpha", &canonical.display().to_string());
+        let m = config
+            .repo_containing_path(&nested.display().to_string())
+            .expect("expected nested match");
+        assert_eq!(m.name, "alpha");
+    }
+
+    #[test]
+    fn repo_containing_path_no_match_when_outside() {
+        let dir = tempfile::tempdir().unwrap();
+        let canonical = std::fs::canonicalize(dir.path()).unwrap();
+        let config = config_with_repo("alpha", &canonical.display().to_string());
+        // Sibling that isn't inside the repo.
+        let other = tempfile::tempdir().unwrap();
+        let other_canonical = std::fs::canonicalize(other.path()).unwrap();
+        assert!(config
+            .repo_containing_path(&other_canonical.display().to_string())
+            .is_none());
+    }
+
+    #[test]
+    fn repo_containing_path_sibling_prefix_does_not_match() {
+        // /a/foo must not match a repo at /a/foo-bar. Regression guard
+        // for the path-boundary rule.
+        let parent = tempfile::tempdir().unwrap();
+        let parent_canonical = std::fs::canonicalize(parent.path()).unwrap();
+        let foo = parent_canonical.join("foo");
+        let foo_bar = parent_canonical.join("foo-bar");
+        std::fs::create_dir_all(&foo).unwrap();
+        std::fs::create_dir_all(&foo_bar).unwrap();
+        let config = config_with_repo("foo", &foo.display().to_string());
+        // Query against foo-bar; must not match the repo at foo.
+        let result = config.repo_containing_path(&foo_bar.display().to_string());
+        assert!(
+            result.is_none(),
+            "expected None — /a/foo-bar must not match repo /a/foo, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn repo_containing_path_longest_prefix_wins() {
+        // If two repos are registered and one is a subdirectory of the
+        // other (legal under add_repo since canonical paths differ),
+        // the nested repo takes precedence for paths inside it.
+        let parent = tempfile::tempdir().unwrap();
+        let parent_canonical = std::fs::canonicalize(parent.path()).unwrap();
+        let outer = parent_canonical.join("outer");
+        let inner = outer.join("inner");
+        let leaf = inner.join("deeper");
+        std::fs::create_dir_all(&leaf).unwrap();
+        let mut config = empty_config();
+        config.repos.push(RepoEntry {
+            name: "outer".into(),
+            path: outer.display().to_string(),
+            provider: IssueProvider::default(),
+        });
+        config.repos.push(RepoEntry {
+            name: "inner".into(),
+            path: inner.display().to_string(),
+            provider: IssueProvider::default(),
+        });
+        let m = config
+            .repo_containing_path(&leaf.display().to_string())
+            .expect("expected match");
+        assert_eq!(m.name, "inner");
+    }
+
+    #[test]
+    fn repo_containing_path_canonicalizes_symlinks() {
+        // Stored repo path is canonical. Querying via a symlinked
+        // alias (created in a sibling tempdir, pointing at the real
+        // repo) must still match because we canonicalize the input.
+        let real = tempfile::tempdir().unwrap();
+        let real_canonical = std::fs::canonicalize(real.path()).unwrap();
+        let link_parent = tempfile::tempdir().unwrap();
+        let link = link_parent.path().join("alias");
+        std::os::unix::fs::symlink(&real_canonical, &link).unwrap();
+        let config = config_with_repo("alpha", &real_canonical.display().to_string());
+        let m = config
+            .repo_containing_path(&link.display().to_string())
+            .expect("expected match via symlink");
+        assert_eq!(m.name, "alpha");
     }
 }
