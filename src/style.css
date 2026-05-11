@@ -459,6 +459,26 @@ select:focus-visible {
   flex: 1;
   min-width: 0;
 }
+.sb-row-reply {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 3px 6px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  color: var(--text-1);
+  background: var(--bg-deep);
+  border: 1px solid var(--status-needs);
+  border-radius: var(--radius-1);
+  outline: none;
+}
+.sb-row-reply::placeholder {
+  color: var(--text-3);
+}
+.sb-row-reply:focus {
+  border-color: var(--accent);
+}
 
 /* Collapsed row: just a dot, centered */
 .sb-row-collapsed {
