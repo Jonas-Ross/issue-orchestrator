@@ -22,7 +22,7 @@ export function PrChip({ prStatus }: Props) {
   return (
     <button
       type="button"
-      class={`pr-chip pr-chip-${prStatus.checks} sb-pr-checks-${prStatus.checks}`}
+      class={`pr-chip pr-chip-${prStatus.checks}`}
       title={`PR #${prStatus.number} — ${CI_LABEL[prStatus.checks]}`}
       onClick={onClick}
     >

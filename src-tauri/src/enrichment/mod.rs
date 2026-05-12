@@ -135,11 +135,11 @@ pub enum EnrichmentCmd {
     UpsertSession(SessionInfo),
     /// Notify the actor that a session was removed and can be dropped.
     RemoveSession(SessionId),
-    /// Trigger an immediate refresh of all sessions (e.g. on status change).
-    RefreshNow,
+    /// Trigger an immediate one-shot refresh for a single session (e.g. on status change).
+    RefreshOne(SessionId),
 }
 
-/// The enrichment actor. Ticks on the given interval and on `RefreshNow`,
+/// The enrichment actor. Ticks on the given interval and on `RefreshOne`,
 /// querying `PrInspector` for each tracked session and forwarding changes
 /// into the registry via `RegistryCmd::UpdatePrStatus`.
 pub struct EnrichmentActor {
@@ -183,8 +183,8 @@ impl EnrichmentActor {
                         EnrichmentCmd::RemoveSession(id) => {
                             self.sessions.remove(&id);
                         }
-                        EnrichmentCmd::RefreshNow => {
-                            self.poll_all().await;
+                        EnrichmentCmd::RefreshOne(id) => {
+                            self.poll_one(&id).await;
                         }
                     }
                 }
@@ -199,23 +199,33 @@ impl EnrichmentActor {
 
     async fn poll_all(&self) {
         for info in self.sessions.values() {
-            match self
-                .inspector
-                .pr_for_branch(&info.repo_path, &info.branch)
-                .await
-            {
-                Ok(pr_status) => {
-                    let cmd = RegistryCmd::UpdatePrStatus {
-                        id: info.id.clone(),
-                        pr_status,
-                    };
-                    if let Err(e) = self.registry.send(cmd).await {
-                        warn!(?e, "enrichment: registry channel closed");
-                    }
+            self.poll_session(info).await;
+        }
+    }
+
+    async fn poll_one(&self, id: &str) {
+        if let Some(info) = self.sessions.get(id) {
+            self.poll_session(info).await;
+        }
+    }
+
+    async fn poll_session(&self, info: &SessionInfo) {
+        match self
+            .inspector
+            .pr_for_branch(&info.repo_path, &info.branch)
+            .await
+        {
+            Ok(pr_status) => {
+                let cmd = RegistryCmd::UpdatePrStatus {
+                    id: info.id.clone(),
+                    pr_status,
+                };
+                if let Err(e) = self.registry.send(cmd).await {
+                    warn!(?e, "enrichment: registry channel closed");
                 }
-                Err(e) => {
-                    warn!(session_id = %info.id, ?e, "enrichment: pr_for_branch failed");
-                }
+            }
+            Err(e) => {
+                warn!(session_id = %info.id, ?e, "enrichment: pr_for_branch failed");
             }
         }
     }
@@ -251,8 +261,8 @@ pub fn spawn_enrichment_bridge(
                         .send(EnrichmentCmd::RemoveSession(session_id))
                         .await;
                 }
-                RegistryEvent::StatusChange { .. } => {
-                    let _ = enrichment_tx.send(EnrichmentCmd::RefreshNow).await;
+                RegistryEvent::StatusChange { session_id, .. } => {
+                    let _ = enrichment_tx.send(EnrichmentCmd::RefreshOne(session_id)).await;
                 }
                 _ => {}
             }

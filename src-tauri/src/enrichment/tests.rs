@@ -129,7 +129,7 @@ async fn refresh_now_emits_pr_status_change_with_open_pr() {
         .await
         .unwrap();
 
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
 
     let (sid, ps) = wait_for_pr_change(&mut event_rx).await;
     assert_eq!(sid, session_id);
@@ -164,7 +164,7 @@ async fn refresh_now_emits_pr_status_change_when_pr_disappears() {
         }))
         .await
         .unwrap();
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
     let (_, ps) = wait_for_pr_change(&mut event_rx).await;
     assert_eq!(ps, Some(pr));
 
@@ -203,7 +203,7 @@ async fn refresh_now_produces_no_event_when_no_pr_exists_from_start() {
         }))
         .await
         .unwrap();
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
 
     // No PrStatusChange should arrive (None→None is deduped away).
     let no_event = timeout(Duration::from_millis(300), async {
@@ -256,7 +256,7 @@ async fn remove_session_stops_polling() {
         .await
         .unwrap();
 
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
 
     // No PrStatusChange should arrive after removal.
     let no_event = timeout(Duration::from_millis(300), async {
@@ -302,13 +302,13 @@ async fn dedup_suppresses_unchanged_pr_status() {
         .unwrap();
 
     // First refresh — should emit.
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
     let (sid, ps) = wait_for_pr_change(&mut event_rx).await;
     assert_eq!(sid, session_id);
     assert_eq!(ps, Some(pr.clone()));
 
     // Second refresh with same result — registry actor deduplicates, no new event.
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
 
     let no_change = timeout(Duration::from_millis(300), async {
         loop {
@@ -352,9 +352,10 @@ async fn bridge_skips_jira_repo_session() {
     let summary = make_session_summary("jira-s1", Some("feature/jira-branch"), Some("jira-project"));
     enrich_event_tx.send(RegistryEvent::SessionAdded(summary)).unwrap();
 
-    // Give the bridge time to process, then trigger a refresh.
+    // Give the bridge time to process, then trigger a refresh for any id
+    // (actor has no sessions since bridge filtered the Jira one out).
     tokio::time::sleep(Duration::from_millis(50)).await;
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne("probe".into())).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     assert_eq!(
@@ -386,7 +387,7 @@ async fn bridge_skips_linear_repo_session() {
     enrich_event_tx.send(RegistryEvent::SessionAdded(summary)).unwrap();
 
     tokio::time::sleep(Duration::from_millis(50)).await;
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne("probe".into())).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     assert_eq!(
@@ -420,7 +421,7 @@ async fn bridge_skips_bash_session_with_no_repo_name() {
     enrich_event_tx.send(RegistryEvent::SessionAdded(summary)).unwrap();
 
     tokio::time::sleep(Duration::from_millis(50)).await;
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne("probe".into())).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     assert_eq!(
@@ -461,7 +462,7 @@ async fn inspector_returning_none_for_closed_pr_causes_chip_to_disappear() {
         }))
         .await
         .unwrap();
-    enrich_tx.send(EnrichmentCmd::RefreshNow).await.unwrap();
+    enrich_tx.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
     let (_, ps) = wait_for_pr_change(&mut event_rx).await;
     assert_eq!(ps, Some(open_pr), "first tick must set pr_status");
 
