@@ -467,15 +467,21 @@ async fn inspector_returning_none_for_closed_pr_causes_chip_to_disappear() {
     assert_eq!(ps, Some(open_pr), "first tick must set pr_status");
 
     // Phase 2: inspector now returns None (closed PR filtered at boundary) — chip must vanish.
-    // We push None through the registry directly (same path as when GhPrInspector
-    // returns Ok(None) for a non-OPEN state).
-    registry_tx
-        .send(RegistryCmd::UpdatePrStatus {
+    // Spawn a new actor with a None-returning inspector to exercise the full actor→registry path.
+    let enrich_tx2 = EnrichmentActor::spawn(
+        registry_tx.clone(),
+        Arc::new(MockInspector { result: None }),
+        Duration::from_secs(3600),
+    );
+    enrich_tx2
+        .send(EnrichmentCmd::UpsertSession(SessionInfo {
             id: session_id.clone(),
-            pr_status: None,
-        })
+            branch: "feature/pr-closed".into(),
+            repo_path: "/fake/repo".into(),
+        }))
         .await
         .unwrap();
+    enrich_tx2.send(EnrichmentCmd::RefreshOne(session_id.clone())).await.unwrap();
 
     let (sid, ps) = wait_for_pr_change(&mut event_rx).await;
     assert_eq!(sid, session_id);

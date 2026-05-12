@@ -74,8 +74,14 @@ impl PrInspector for GhPrInspector {
             return Ok(None);
         }
 
-        let number = val["number"].as_u64().unwrap_or(0) as u32;
-        let url = val["url"].as_str().unwrap_or("").to_owned();
+        let number = val["number"]
+            .as_u64()
+            .ok_or_else(|| crate::error::Error::Issues("gh pr view: missing field number".into()))?
+            as u32;
+        let url = val["url"]
+            .as_str()
+            .ok_or_else(|| crate::error::Error::Issues("gh pr view: missing field url".into()))?
+            .to_owned();
 
         let checks = rollup_from_json(val.get("statusCheckRollup"));
 
@@ -99,15 +105,14 @@ fn rollup_from_json(val: Option<&serde_json::Value>) -> ChecksRollup {
             .get("conclusion")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let status = check.get("status").and_then(|v| v.as_str()).unwrap_or("");
 
         match conclusion {
             "FAILURE" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED" => any_fail = true,
             "SUCCESS" | "NEUTRAL" | "SKIPPED" => {}
             _ => {
-                if matches!(status, "QUEUED" | "IN_PROGRESS" | "WAITING" | "PENDING") {
-                    any_pending = true;
-                }
+                // Unknown conclusion: treat as pending regardless of status so a
+                // check with missing/unrecognized fields doesn't silently become Pass.
+                any_pending = true;
             }
         }
     }
