@@ -117,6 +117,7 @@ async fn refresh_now_emits_pr_status_change_with_open_pr() {
     let enrich_tx = EnrichmentActor::spawn(
         registry_tx,
         Arc::new(MockInspector { result: Some(pr.clone()) }),
+        Duration::from_secs(3600),
     );
 
     enrich_tx
@@ -153,6 +154,7 @@ async fn refresh_now_emits_pr_status_change_when_pr_disappears() {
     let enrich_tx = EnrichmentActor::spawn(
         registry_tx.clone(),
         Arc::new(MockInspector { result: Some(pr.clone()) }),
+        Duration::from_secs(3600),
     );
     enrich_tx
         .send(EnrichmentCmd::UpsertSession(SessionInfo {
@@ -191,6 +193,7 @@ async fn refresh_now_produces_no_event_when_no_pr_exists_from_start() {
     let enrich_tx = EnrichmentActor::spawn(
         registry_tx,
         Arc::new(MockInspector { result: None }),
+        Duration::from_secs(3600),
     );
     enrich_tx
         .send(EnrichmentCmd::UpsertSession(SessionInfo {
@@ -235,6 +238,7 @@ async fn remove_session_stops_polling() {
                 checks: ChecksRollup::Pending,
             }),
         }),
+        Duration::from_secs(3600),
     );
 
     enrich_tx
@@ -285,6 +289,7 @@ async fn dedup_suppresses_unchanged_pr_status() {
     let enrich_tx = EnrichmentActor::spawn(
         registry_tx,
         Arc::new(MockInspector { result: Some(pr.clone()) }),
+        Duration::from_secs(3600),
     );
 
     enrich_tx
@@ -339,7 +344,7 @@ async fn bridge_skips_jira_repo_session() {
     let (event_tx, _event_rx) = mpsc::unbounded_channel::<RegistryEvent>();
     let (enrich_event_tx, enrich_event_rx) = mpsc::unbounded_channel::<RegistryEvent>();
     let registry_tx = SessionRegistryActor::spawn(event_tx);
-    let enrich_tx = EnrichmentActor::spawn(registry_tx, Arc::new(inspector));
+    let enrich_tx = EnrichmentActor::spawn(registry_tx, Arc::new(inspector), Duration::from_secs(3600));
 
     spawn_enrichment_bridge(enrich_event_rx, enrich_tx.clone(), config);
 
@@ -372,7 +377,7 @@ async fn bridge_skips_linear_repo_session() {
     let (enrich_event_tx, enrich_event_rx) = mpsc::unbounded_channel::<RegistryEvent>();
     let (registry_event_tx, _registry_event_rx) = mpsc::unbounded_channel::<RegistryEvent>();
     let registry_tx = SessionRegistryActor::spawn(registry_event_tx);
-    let enrich_tx = EnrichmentActor::spawn(registry_tx, Arc::new(inspector));
+    let enrich_tx = EnrichmentActor::spawn(registry_tx, Arc::new(inspector), Duration::from_secs(3600));
 
     spawn_enrichment_bridge(enrich_event_rx, enrich_tx.clone(), config);
 
@@ -405,7 +410,7 @@ async fn bridge_skips_bash_session_with_no_repo_name() {
     let (inspector, calls) = RecordingInspector::new(None);
     let (registry_event_tx, _registry_event_rx) = mpsc::unbounded_channel::<RegistryEvent>();
     let registry_tx = SessionRegistryActor::spawn(registry_event_tx);
-    let enrich_tx = EnrichmentActor::spawn(registry_tx, Arc::new(inspector));
+    let enrich_tx = EnrichmentActor::spawn(registry_tx, Arc::new(inspector), Duration::from_secs(3600));
     let (enrich_event_tx, enrich_event_rx) = mpsc::unbounded_channel::<RegistryEvent>();
 
     spawn_enrichment_bridge(enrich_event_rx, enrich_tx.clone(), config);
@@ -446,6 +451,7 @@ async fn inspector_returning_none_for_closed_pr_causes_chip_to_disappear() {
     let enrich_tx = EnrichmentActor::spawn(
         registry_tx.clone(),
         Arc::new(MockInspector { result: Some(open_pr.clone()) }),
+        Duration::from_secs(3600),
     );
     enrich_tx
         .send(EnrichmentCmd::UpsertSession(SessionInfo {
@@ -482,10 +488,8 @@ async fn inspector_returning_none_for_closed_pr_causes_chip_to_disappear() {
 
 #[tokio::test]
 async fn enrichment_actor_polls_on_timer_interval() {
-    // The actor must accept an interval: Duration parameter so tests can drive
+    // The actor accepts an interval: Duration parameter so tests can drive
     // ticks with sub-second intervals without relying on RefreshNow.
-    // This test will FAIL until EnrichmentActor::spawn is extended to accept
-    // an `interval: Duration` parameter and the run loop uses it.
     let pr = PrStatus {
         number: 7,
         url: "https://github.com/foo/bar/pull/7".into(),
@@ -498,7 +502,7 @@ async fn enrichment_actor_polls_on_timer_interval() {
     let session_id = spawn_bash(&registry_tx).await;
 
     // Construct actor with a 80ms tick (production uses 30s).
-    let enrich_tx = EnrichmentActor::spawn_with_interval(
+    let enrich_tx = EnrichmentActor::spawn(
         registry_tx,
         Arc::new(inspector),
         Duration::from_millis(80),

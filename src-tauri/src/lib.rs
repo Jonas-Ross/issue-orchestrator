@@ -121,6 +121,7 @@ pub fn run() {
             let enrichment_actor_tx = enrichment::EnrichmentActor::spawn(
                 registry_tx.clone(),
                 std::sync::Arc::new(enrichment::GhPrInspector),
+                std::time::Duration::from_secs(30),
             );
             enrichment::spawn_enrichment_bridge(
                 enrich_rx,

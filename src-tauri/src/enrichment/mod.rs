@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio::time;
 use tracing::{info, warn};
 
-use crate::config::ConfigHandle;
+use crate::config::{ConfigHandle, IssueProvider};
 use crate::error::Result;
 use crate::registry::{RegistryCmd, RegistryEvent, SessionId};
 
@@ -139,20 +139,22 @@ pub enum EnrichmentCmd {
     RefreshNow,
 }
 
-/// The enrichment actor. Ticks every 30s and on `RefreshNow`, querying
-/// `PrInspector` for each tracked session and forwarding changes into the
-/// registry via `RegistryCmd::UpdatePrStatus`.
+/// The enrichment actor. Ticks on the given interval and on `RefreshNow`,
+/// querying `PrInspector` for each tracked session and forwarding changes
+/// into the registry via `RegistryCmd::UpdatePrStatus`.
 pub struct EnrichmentActor {
     rx: mpsc::Receiver<EnrichmentCmd>,
     registry: mpsc::Sender<RegistryCmd>,
     inspector: Arc<dyn PrInspector>,
     sessions: HashMap<SessionId, SessionInfo>,
+    interval: Duration,
 }
 
 impl EnrichmentActor {
     pub fn spawn(
         registry: mpsc::Sender<RegistryCmd>,
         inspector: Arc<dyn PrInspector>,
+        interval: Duration,
     ) -> mpsc::Sender<EnrichmentCmd> {
         let (tx, rx) = mpsc::channel(64);
         let actor = Self {
@@ -160,26 +162,15 @@ impl EnrichmentActor {
             registry,
             inspector,
             sessions: HashMap::new(),
+            interval,
         };
         tauri::async_runtime::spawn(actor.run());
         tx
     }
 
-    /// Stub: interval is not yet a constructor parameter — this method
-    /// exists only so AC #8 tests compile. It will panic at runtime until
-    /// `run()` is updated to accept a configurable tick interval.
-    #[allow(dead_code)]
-    pub fn spawn_with_interval(
-        _registry: mpsc::Sender<RegistryCmd>,
-        _inspector: Arc<dyn PrInspector>,
-        _interval: Duration,
-    ) -> mpsc::Sender<EnrichmentCmd> {
-        unimplemented!("AC #8: interval parameter not yet wired — implement spawn_with_interval")
-    }
-
     async fn run(mut self) {
         info!("enrichment actor started");
-        let mut interval = time::interval(Duration::from_secs(30));
+        let mut interval = time::interval(self.interval);
         interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 
         loop {
@@ -244,12 +235,14 @@ pub fn spawn_enrichment_bridge(
                 RegistryEvent::SessionAdded(summary) => {
                     if let (Some(branch), Some(repo_name)) = (&summary.branch, &summary.repo_name) {
                         if let Ok(repo) = config.lookup_repo(repo_name).await {
-                            let info = SessionInfo {
-                                id: summary.id.clone(),
-                                branch: branch.clone(),
-                                repo_path: repo.path.clone(),
-                            };
-                            let _ = enrichment_tx.send(EnrichmentCmd::UpsertSession(info)).await;
+                            if matches!(repo.provider, IssueProvider::Github) {
+                                let info = SessionInfo {
+                                    id: summary.id.clone(),
+                                    branch: branch.clone(),
+                                    repo_path: repo.path.clone(),
+                                };
+                                let _ = enrichment_tx.send(EnrichmentCmd::UpsertSession(info)).await;
+                            }
                         }
                     }
                 }
