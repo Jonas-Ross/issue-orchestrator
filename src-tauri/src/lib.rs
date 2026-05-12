@@ -44,6 +44,7 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::repos::add_repo,
             ipc::repos::remove_repo,
             ipc::repos::update_repo_provider,
+            ipc::git::git_diff,
             ipc::issues::list_issues,
             ipc::issues::get_issue_body,
             ipc::issues::decide_next_issue,

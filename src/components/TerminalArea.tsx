@@ -1,5 +1,5 @@
 import { sessions, activeId } from "../state/sessions";
-import { TerminalView } from "./TerminalView";
+import { RightPane } from "./RightPane";
 import { EmptyState } from "./EmptyState";
 
 export function TerminalArea() {
@@ -9,7 +9,12 @@ export function TerminalArea() {
     <div className="terminal-area">
       {list.length === 0 && <EmptyState />}
       {list.map((s) => (
-        <TerminalView key={s.id} sessionId={s.id} active={s.id === active} />
+        <RightPane
+          key={s.id}
+          sessionId={s.id}
+          active={s.id === active}
+          worktreePath={s.worktreePath ?? null}
+        />
       ))}
     </div>
   );

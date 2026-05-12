@@ -1,4 +1,5 @@
 pub mod events;
+pub mod git;
 pub mod issues;
 pub mod pty;
 pub mod repos;

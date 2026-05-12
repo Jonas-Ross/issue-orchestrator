@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { commands, events } from "./lib/bindings";
 import { addSession, removeSession, setStatus, updateSession } from "./state/sessions";
 import { startPtyStream } from "./state/pty-stream";
+import { startViewMode } from "./state/view-mode";
 import { setupState } from "./state/setup";
 import { loadRepos } from "./state/repos";
 import { Sidebar } from "./components/Sidebar";
@@ -22,6 +23,7 @@ export function App() {
 
   useEffect(() => {
     startPtyStream();
+    startViewMode();
 
     const unlistens: Array<() => void> = [];
 

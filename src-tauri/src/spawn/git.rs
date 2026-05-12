@@ -33,6 +33,10 @@ pub trait GitRunner: Send + Sync {
     fn worktree_add_new(&self, repo: &Path, worktree_path: &Path, branch: &str) -> Result<()>;
     fn worktree_add_existing(&self, repo: &Path, worktree_path: &Path, branch: &str)
         -> Result<()>;
+    /// Captured `git -C <repo> diff HEAD --no-color`. Tracked + staged
+    /// changes only — untracked files don't appear (matches what an IDE
+    /// would call "uncommitted").
+    fn diff(&self, repo: &Path) -> Result<String>;
 }
 
 pub struct GitCli;
@@ -74,6 +78,85 @@ impl GitRunner for GitCli {
             &["worktree", "add"],
             &[worktree_path.as_os_str(), branch.as_ref()],
         )
+    }
+
+    fn diff(&self, repo: &Path) -> Result<String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["diff", "HEAD", "--no-color"])
+            .output()
+            .map_err(|e| Error::Git(format!("git: {e}")))?;
+        if !out.status.success() {
+            return Err(Error::Git(format!(
+                "git diff failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            )));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn init_repo_with_commit(dir: &Path) {
+        let run = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .output()
+                .expect("git");
+            assert!(out.status.success(), "git {args:?}: {:?}", out);
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@t"]);
+        run(&["config", "user.name", "t"]);
+        run(&["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
+        run(&["add", "a.txt"]);
+        run(&["commit", "-q", "-m", "init"]);
+    }
+
+    #[test]
+    fn diff_returns_empty_on_clean_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        init_repo_with_commit(tmp.path());
+        let out = GitCli.diff(tmp.path()).unwrap();
+        assert!(out.is_empty(), "expected clean diff, got: {out:?}");
+    }
+
+    #[test]
+    fn diff_captures_unstaged_and_staged_changes() {
+        let tmp = tempfile::tempdir().unwrap();
+        init_repo_with_commit(tmp.path());
+        // Modify (unstaged).
+        std::fs::write(tmp.path().join("a.txt"), "hello\nworld\n").unwrap();
+        let unstaged = GitCli.diff(tmp.path()).unwrap();
+        assert!(unstaged.contains("+world"), "got: {unstaged}");
+
+        // Stage the change — diff HEAD still shows it.
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["add", "a.txt"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let staged = GitCli.diff(tmp.path()).unwrap();
+        assert!(staged.contains("+world"), "got: {staged}");
+    }
+
+    #[test]
+    fn diff_returns_git_error_on_non_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = GitCli.diff(tmp.path()).unwrap_err();
+        match err {
+            Error::Git(_) => {}
+            other => panic!("expected Error::Git, got {other:?}"),
+        }
     }
 }
 

@@ -212,7 +212,7 @@ src-tauri/src/
 ├── registry/              # SessionRegistryActor, RegistryCmd / Event,
 │                          # PTY command builder + env filter
 ├── ipc/                   # #[tauri::command] surface split per domain:
-│                          # pty / setup / repos / issues / secrets
+│                          # pty / setup / repos / issues / secrets / git
 ├── hooks/                 # UDS listener + JSONL audit log
 │                          # (the script itself ships under plugins/)
 ├── spawn/                 # spawn_issue_session, GitRunner trait,
