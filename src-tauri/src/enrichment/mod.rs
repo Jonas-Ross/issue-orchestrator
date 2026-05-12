@@ -165,6 +165,18 @@ impl EnrichmentActor {
         tx
     }
 
+    /// Stub: interval is not yet a constructor parameter — this method
+    /// exists only so AC #8 tests compile. It will panic at runtime until
+    /// `run()` is updated to accept a configurable tick interval.
+    #[allow(dead_code)]
+    pub fn spawn_with_interval(
+        _registry: mpsc::Sender<RegistryCmd>,
+        _inspector: Arc<dyn PrInspector>,
+        _interval: Duration,
+    ) -> mpsc::Sender<EnrichmentCmd> {
+        unimplemented!("AC #8: interval parameter not yet wired — implement spawn_with_interval")
+    }
+
     async fn run(mut self) {
         info!("enrichment actor started");
         let mut interval = time::interval(Duration::from_secs(30));

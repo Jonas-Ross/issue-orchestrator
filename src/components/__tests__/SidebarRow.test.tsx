@@ -1,7 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/preact";
 import { mockCommands } from "../../test/tauri-mock";
 import { SidebarRow } from "../SidebarRow";
-import { activeId, addSession, removeSession, sessions, setStatus } from "../../state/sessions";
+import {
+  activeId,
+  addSession,
+  removeSession,
+  sessions,
+  setStatus,
+  setPrStatus,
+} from "../../state/sessions";
 import { makeSession } from "../../test/factories";
 
 beforeEach(() => {
@@ -283,6 +290,27 @@ describe("<SidebarRow /> — PR chip", () => {
     });
     render(<SidebarRow session={session} collapsed={false} />);
     // Shell sessions don't render the line3 block at all, so the chip can't appear.
+    expect(document.querySelector(".pr-chip")).toBeNull();
+  });
+
+  // AC #5: when prStatus transitions Some → null the chip must disappear
+  it("removes the PR chip when prStatus transitions from Some to null", () => {
+    const session = makeSession({
+      id: "ac5",
+      branch: "feature/was-open",
+      prStatus: { number: 55, url: "https://github.com/foo/bar/pull/55", checks: "pass" },
+    });
+    addSession(session);
+    const { rerender } = render(
+      <SidebarRow session={sessions.value.find((s) => s.id === "ac5")!} collapsed={false} />,
+    );
+    expect(document.querySelector(".pr-chip")).not.toBeNull();
+
+    // Simulate enrichment actor clearing prStatus (e.g. PR was merged/closed)
+    setPrStatus("ac5", null);
+    rerender(
+      <SidebarRow session={sessions.value.find((s) => s.id === "ac5")!} collapsed={false} />,
+    );
     expect(document.querySelector(".pr-chip")).toBeNull();
   });
 });
