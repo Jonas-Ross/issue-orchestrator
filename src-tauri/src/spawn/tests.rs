@@ -106,6 +106,7 @@ fn fake_registry(
                         SpawnSpec::ClaudeAdHoc { repo_name, .. } => repo_name.clone(),
                         SpawnSpec::Bash => None,
                     },
+                    pr_status: None,
                 };
                 *captured.lock().unwrap() = Some(spec);
                 let _ = reply.send(Ok(summary));

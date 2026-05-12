@@ -202,3 +202,87 @@ describe("<SidebarRow /> — inline reply input", () => {
     expect(row.classList.contains("needs")).toBe(false);
   });
 });
+
+describe("<SidebarRow /> — PR chip", () => {
+  beforeEach(() => {
+    for (const s of [...sessions.value]) removeSession(s.id);
+    activeId.value = null;
+    // Allow open() calls (plugin:shell|open) to pass through silently so chip
+    // click tests don't throw on unmocked commands.
+    mockCommands({ "plugin:shell|open": () => null }); // allow PrChip click-through
+  });
+
+  it("renders the PR chip when prStatus is present and session has a branch", () => {
+    const session = makeSession({
+      id: "s1",
+      branch: "feature/my-branch",
+      prStatus: { number: 42, url: "https://github.com/foo/bar/pull/42", checks: "pass" },
+    });
+    render(<SidebarRow session={session} collapsed={false} />);
+    expect(document.querySelector(".pr-chip")).not.toBeNull();
+    expect(screen.getByText(/PR #42/)).toBeInTheDocument();
+  });
+
+  it("does not render the PR chip when prStatus is null", () => {
+    const session = makeSession({
+      id: "s1",
+      branch: "feature/my-branch",
+      prStatus: null,
+    });
+    render(<SidebarRow session={session} collapsed={false} />);
+    expect(document.querySelector(".pr-chip")).toBeNull();
+  });
+
+  it("applies pr-chip-fail class when checks is fail", () => {
+    const session = makeSession({
+      id: "s1",
+      branch: "feature/failing",
+      prStatus: { number: 7, url: "https://github.com/foo/bar/pull/7", checks: "fail" },
+    });
+    render(<SidebarRow session={session} collapsed={false} />);
+    const chip = document.querySelector(".pr-chip");
+    expect(chip).not.toBeNull();
+    expect(chip!.classList.contains("pr-chip-fail")).toBe(true);
+  });
+
+  it("applies pr-chip-pending class when checks is pending", () => {
+    const session = makeSession({
+      id: "s1",
+      branch: "feature/running",
+      prStatus: { number: 3, url: "https://github.com/foo/bar/pull/3", checks: "pending" },
+    });
+    render(<SidebarRow session={session} collapsed={false} />);
+    const chip = document.querySelector(".pr-chip");
+    expect(chip!.classList.contains("pr-chip-pending")).toBe(true);
+  });
+
+  it("clicking the PR chip does not change the active session", () => {
+    const s1 = makeSession({ id: "s1", status: "running" });
+    const s2 = makeSession({
+      id: "s2",
+      status: "running",
+      branch: "feature/has-pr",
+      prStatus: { number: 10, url: "https://github.com/foo/bar/pull/10", checks: "pass" },
+    });
+    addSession(s1);
+    addSession(s2);
+    activeId.value = "s1";
+
+    render(<SidebarRow session={s2} collapsed={false} />);
+    const chip = document.querySelector(".pr-chip") as HTMLElement;
+    fireEvent.click(chip);
+    expect(activeId.value).toBe("s1");
+  });
+
+  it("does not render the PR chip for shell sessions (no branch)", () => {
+    const session = makeSession({
+      id: "s1",
+      branch: null,
+      issueUrl: null,
+      prStatus: { number: 99, url: "https://github.com/foo/bar/pull/99", checks: "pass" },
+    });
+    render(<SidebarRow session={session} collapsed={false} />);
+    // Shell sessions don't render the line3 block at all, so the chip can't appear.
+    expect(document.querySelector(".pr-chip")).toBeNull();
+  });
+});
