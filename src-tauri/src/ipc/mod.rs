@@ -55,5 +55,8 @@ fn forward(app: &AppHandle, evt: RegistryEvent) -> tauri::Result<()> {
         RegistryEvent::StatusChange { session_id, status } => {
             events::StatusChange { session_id, status }.emit(app)
         }
+        RegistryEvent::PrStatusChange { session_id, pr_status } => {
+            events::PrStatusChange { session_id, pr_status }.emit(app)
+        }
     }
 }

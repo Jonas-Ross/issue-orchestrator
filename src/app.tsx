@@ -1,7 +1,7 @@
 import { useEffect } from "preact/hooks";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { commands, events } from "./lib/bindings";
-import { addSession, removeSession, setStatus, updateSession } from "./state/sessions";
+import { addSession, removeSession, setStatus, updateSession, setPrStatus } from "./state/sessions";
 import { startPtyStream } from "./state/pty-stream";
 import { setupState } from "./state/setup";
 import { loadRepos } from "./state/repos";
@@ -31,6 +31,11 @@ export function App() {
       unlistens.push(await events.sessionUpdated.listen((e) => updateSession(e.payload)));
       unlistens.push(
         await events.statusChange.listen((e) => setStatus(e.payload.sessionId, e.payload.status)),
+      );
+      unlistens.push(
+        await events.prStatusChange.listen((e) =>
+          setPrStatus(e.payload.sessionId, e.payload.prStatus),
+        ),
       );
 
       const sessionList = await commands.listSessions();

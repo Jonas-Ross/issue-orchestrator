@@ -8,6 +8,7 @@ import { openContextMenu } from "../state/context-menu";
 import type { ContextMenuItem } from "../state/context-menu";
 import { StatusDot } from "./StatusDot";
 import { ActivityIcon } from "./ActivityIcon";
+import { PrChip } from "./PrChip";
 
 interface Props {
   session: SessionSummary;
@@ -164,6 +165,7 @@ export function SidebarRow({ session, collapsed }: Props) {
           <span class="sb-row-branch" title={branchOrPath}>
             {branchOrPath}
           </span>
+          {session.prStatus && <PrChip prStatus={session.prStatus} />}
         </div>
       )}
 

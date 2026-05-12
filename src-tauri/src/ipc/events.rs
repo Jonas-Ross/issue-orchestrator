@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri_specta::Event;
 
+use crate::enrichment::PrStatus;
 use crate::registry::{SessionId, SessionSummary, Status};
 
 /// One chunk of UTF-8 stdout/stderr from a session's PTY.
@@ -36,3 +37,11 @@ pub struct SessionRemoved {
 /// Used for the cwd-inferred rebucket of ad-hoc Claude sessions.
 #[derive(Clone, Debug, Type, Serialize, Deserialize, Event)]
 pub struct SessionUpdated(pub SessionSummary);
+
+/// The PR / CI status for a session's branch changed.
+#[derive(Clone, Debug, Type, Serialize, Deserialize, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct PrStatusChange {
+    pub session_id: SessionId,
+    pub pr_status: Option<PrStatus>,
+}
