@@ -447,6 +447,50 @@ select:focus-visible {
   flex: 1;
   min-width: 0;
 }
+
+/* ── PrChip ──────────────────────────────────────────────────────────── */
+.pr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: var(--radius-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+  background: var(--bg-elev2);
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.pr-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+.pr-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pr-chip-pass .pr-chip-dot {
+  background: var(--status-running);
+}
+.pr-chip-fail .pr-chip-dot {
+  background: var(--status-exited);
+}
+.pr-chip-pending .pr-chip-dot {
+  background: var(--status-spawning);
+}
+.pr-chip-none .pr-chip-dot {
+  background: var(--text-4);
+}
+.pr-chip-label {
+  white-space: nowrap;
+}
+
 .sb-row-reply {
   display: block;
   width: 100%;

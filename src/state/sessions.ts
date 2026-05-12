@@ -1,5 +1,5 @@
 import { signal, computed } from "@preact/signals";
-import type { SessionSummary, Status } from "../lib/bindings";
+import type { PrStatus, SessionSummary, Status } from "../lib/bindings";
 
 /// Sentinel bucket key for sessions without a repo (the Bash debug shell).
 export const SHELL_BUCKET = "__shell";
@@ -48,6 +48,10 @@ export function createSessionsState() {
     sessions.value = sessions.value.map((s) => (s.id === updated.id ? updated : s));
   }
 
+  function setPrStatus(id: string, prStatus: PrStatus | null) {
+    sessions.value = sessions.value.map((s) => (s.id === id ? { ...s, prStatus } : s));
+  }
+
   return {
     sessions,
     activeId,
@@ -57,6 +61,7 @@ export function createSessionsState() {
     removeSession,
     setStatus,
     updateSession,
+    setPrStatus,
   };
 }
 
@@ -70,4 +75,5 @@ export const {
   removeSession,
   setStatus,
   updateSession,
+  setPrStatus,
 } = sessionsStore;

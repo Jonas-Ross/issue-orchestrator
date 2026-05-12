@@ -1,4 +1,5 @@
 pub mod config;
+pub mod enrichment;
 pub mod error;
 pub mod hooks;
 pub mod ipc;
@@ -60,6 +61,7 @@ pub fn make_specta_builder() -> Builder<tauri::Wry> {
             ipc::events::SessionAdded,
             ipc::events::SessionRemoved,
             ipc::events::SessionUpdated,
+            ipc::events::PrStatusChange,
         ])
 }
 
@@ -98,11 +100,34 @@ pub fn run() {
 
             builder.mount_events(app);
 
-            let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel::<registry::RegistryEvent>();
+            let (ipc_tx, ipc_rx) = tokio::sync::mpsc::unbounded_channel::<registry::RegistryEvent>();
+            let (enrich_tx_fanout, enrich_rx) = tokio::sync::mpsc::unbounded_channel::<registry::RegistryEvent>();
+
+            // Fan out the single registry event stream to both consumers.
+            tauri::async_runtime::spawn(async move {
+                let mut rx = event_rx;
+                while let Some(evt) = rx.recv().await {
+                    let _ = ipc_tx.send(evt.clone());
+                    let _ = enrich_tx_fanout.send(evt);
+                }
+            });
+
             let registry_tx = registry::SessionRegistryActor::spawn(event_tx);
-            ipc::spawn_event_bridge(app.handle().clone(), event_rx);
+            ipc::spawn_event_bridge(app.handle().clone(), ipc_rx);
 
             let config_handle = config::ConfigActor::spawn(config.clone(), config_path.clone());
+
+            let enrichment_actor_tx = enrichment::EnrichmentActor::spawn(
+                registry_tx.clone(),
+                std::sync::Arc::new(enrichment::GhPrInspector),
+                std::time::Duration::from_secs(30),
+            );
+            enrichment::spawn_enrichment_bridge(
+                enrich_rx,
+                enrichment_actor_tx,
+                config_handle.clone(),
+            );
 
             let registry_for_hooks = registry_tx.clone();
             let sock_for_hooks = sock_path.clone();

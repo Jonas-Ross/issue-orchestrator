@@ -124,6 +124,43 @@ describe("sessions state", () => {
     });
   });
 
+  describe("setPrStatus", () => {
+    it("updates prStatus on the matching session", () => {
+      const { sessions, addSession, setPrStatus } = createSessionsState();
+      addSession(makeSession({ id: "s1" }));
+      setPrStatus("s1", { number: 42, url: "https://github.com/foo/bar/pull/42", checks: "pass" });
+      expect(sessions.value[0].prStatus?.number).toBe(42);
+      expect(sessions.value[0].prStatus?.checks).toBe("pass");
+    });
+
+    it("sets prStatus to null to clear it", () => {
+      const { sessions, addSession, setPrStatus } = createSessionsState();
+      addSession(
+        makeSession({
+          id: "s1",
+          prStatus: { number: 1, url: "https://github.com/foo/bar/pull/1", checks: "fail" },
+        }),
+      );
+      setPrStatus("s1", null);
+      expect(sessions.value[0].prStatus).toBeNull();
+    });
+
+    it("is a no-op for unknown ids", () => {
+      const { sessions, addSession, setPrStatus } = createSessionsState();
+      addSession(makeSession({ id: "s1" }));
+      setPrStatus("nope", { number: 1, url: "https://example.com", checks: "pass" });
+      expect(sessions.value[0].prStatus).toBeNull();
+    });
+
+    it("preserves other sessions", () => {
+      const { sessions, addSession, setPrStatus } = createSessionsState();
+      addSession(makeSession({ id: "s1" }));
+      addSession(makeSession({ id: "s2" }));
+      setPrStatus("s1", { number: 7, url: "https://github.com/foo/bar/pull/7", checks: "pending" });
+      expect(sessions.value[1].prStatus).toBeNull();
+    });
+  });
+
   it("isolated factories don't share state", () => {
     const a = createSessionsState();
     const b = createSessionsState();

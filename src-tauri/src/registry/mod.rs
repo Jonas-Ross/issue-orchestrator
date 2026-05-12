@@ -16,6 +16,7 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use crate::enrichment::PrStatus;
 use crate::error::{Error, Result};
 use crate::hooks::{HookEvent, NotificationKind};
 use crate::pty::{self, PtyEvent};
@@ -41,6 +42,9 @@ pub struct SessionSummary {
     /// shell, which has no repo affinity. Used by the frontend to bucket
     /// sessions into per-repo drawers.
     pub repo_name: Option<String>,
+    /// Open PR status for the session's branch, if any. `None` until the
+    /// enrichment actor has run at least one poll.
+    pub pr_status: Option<PrStatus>,
 }
 
 /// What kind of process to launch — a debug `bash`, a `claude` for an
@@ -101,6 +105,11 @@ pub enum RegistryCmd {
     /// for sessions we didn't spawn are silently dropped (no orch id
     /// means no correlation).
     HookEvent(HookEvent),
+    /// Enrichment actor pushes an updated PR status for a session.
+    UpdatePrStatus {
+        id: SessionId,
+        pr_status: Option<PrStatus>,
+    },
 }
 
 /// Domain events the actor publishes. A Tauri-aware bridge subscribes to
@@ -125,6 +134,10 @@ pub enum RegistryEvent {
     StatusChange {
         session_id: SessionId,
         status: Status,
+    },
+    PrStatusChange {
+        session_id: SessionId,
+        pr_status: Option<PrStatus>,
     },
 }
 
@@ -178,6 +191,9 @@ impl SessionRegistryActor {
                     let _ = reply.send(self.snapshot());
                 }
                 RegistryCmd::HookEvent(evt) => self.handle_hook(evt),
+                RegistryCmd::UpdatePrStatus { id, pr_status } => {
+                    self.handle_update_pr_status(&id, pr_status);
+                }
             }
         }
         info!("session registry actor stopped");
@@ -256,6 +272,7 @@ impl SessionRegistryActor {
             issue_url: built.issue_url,
             branch: built.branch,
             repo_name: built.repo_name,
+            pr_status: None,
         };
         let summary = session.to_summary();
         self.sessions.insert(id.clone(), session);
@@ -295,6 +312,22 @@ impl SessionRegistryActor {
                 Ok(())
             }
             None => Err(Error::SessionNotFound(id.to_owned())),
+        }
+    }
+
+    fn handle_update_pr_status(&mut self, id: &str, pr_status: Option<PrStatus>) {
+        let Some(session) = self.sessions.get_mut(id) else {
+            return;
+        };
+        if session.pr_status != pr_status {
+            session.pr_status = pr_status.clone();
+            emit(
+                &self.events,
+                RegistryEvent::PrStatusChange {
+                    session_id: id.to_owned(),
+                    pr_status,
+                },
+            );
         }
     }
 

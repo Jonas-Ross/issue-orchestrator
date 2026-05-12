@@ -13,6 +13,7 @@ export function makeSession(overrides: Partial<SessionSummary> = {}): SessionSum
     issueUrl: null,
     branch: null,
     repoName: "alpha",
+    prStatus: null,
     ...overrides,
   };
 }

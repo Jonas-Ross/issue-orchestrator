@@ -42,18 +42,37 @@ and share `config.json`, so don't run them at the same time.
 
 `SessionRegistryActor` owns the `HashMap<SessionId, Session>` outright. All
 state mutations go through `RegistryCmd` messages on a `tokio::mpsc` mailbox
-(`Spawn`, `Write`, `Resize`, `Kill`, `List`, `HookEvent`). There is no shared
-`Mutex<HashMap>` — locking and ordering bugs are designed away. The actor
-publishes `RegistryEvent`s on an unbounded mpsc; it never touches `AppHandle`.
+(`Spawn`, `Write`, `Resize`, `Kill`, `List`, `HookEvent`,
+`UpdatePrStatus`). There is no shared `Mutex<HashMap>` — locking and
+ordering bugs are designed away. The actor publishes `RegistryEvent`s on
+an unbounded mpsc; it never touches `AppHandle`.
+
+### Enrichment actor (`src-tauri/src/enrichment/`)
+
+`EnrichmentActor` polls GitHub PR status for sessions that have a branch.
+It ticks every 30s and also on `RegistryEvent::StatusChange`. The
+`PrInspector` trait (`pr_for_branch(repo, branch) -> Option<PrStatus>`)
+is the boundary; production impl is `GhPrInspector` (shells out to
+`gh pr view`). The actor pushes `RegistryCmd::UpdatePrStatus` back into
+the registry when the result changes; the registry deduplicates (no-op on
+equal values) and emits `RegistryEvent::PrStatusChange`. GitHub-only —
+sessions backed by Jira / Linear repos are silently skipped.
+
+The registry event stream is fanned out to both the IPC bridge and
+`spawn_enrichment_bridge` (which feeds session add/remove/status events
+into the enrichment actor's mailbox). The fanout happens in `lib.rs`
+setup, not inside either actor.
 
 ### Domain → Tauri event bridge (`src-tauri/src/ipc/mod.rs`)
 
 `ipc::spawn_event_bridge` is the only thing that knows how to translate a
 `RegistryEvent` into a typed Tauri event (`PtyData`, `SessionAdded`,
-`SessionRemoved`, `SessionUpdated`, `StatusChange`). `SessionUpdated`
-carries a full `SessionSummary` and is emitted when an ad-hoc Claude
-session is rebucketed into a repo drawer via cwd inference (see "Hook
-bridge" below) — the frontend reducer treats it as "replace by id".
+`SessionRemoved`, `SessionUpdated`, `StatusChange`, `PrStatusChange`).
+`SessionUpdated` carries a full `SessionSummary` and is emitted when an
+ad-hoc Claude session is rebucketed into a repo drawer via cwd inference
+(see "Hook bridge" below) — the frontend reducer treats it as "replace by
+id". `PrStatusChange` carries the new `Option<PrStatus>` payload and is
+listened to in `app.tsx` via `setPrStatus`.
 This is what lets the registry, hook receiver, and spawn flow be
 unit-tested without a Tauri runtime — tests subscribe to
 `RegistryEvent` directly.
@@ -165,16 +184,15 @@ plugin version in both `.claude-plugin/marketplace.json` and
 
 ### Boundary traits for shellouts
 
-`IssueClient` (`src-tauri/src/issues/mod.rs`) and `GitRunner`
-(`src-tauri/src/spawn/git.rs`) are traits stored in `AppState` as
-`Arc<dyn …>` (or constructed per-call from `RepoEntry.provider` for
-`IssueClient` — different repos can use different sources). Production
-impls: `GhCli` / `JiraClient` / `LinearClient` for issues; `GitCli` for
-git. Tests in `src-tauri/src/spawn/tests.rs` substitute recording mocks,
-so spawn-flow tests touch no real `gh` / `git` and create no real
-worktrees; provider tests in `src-tauri/src/issues/tests.rs` use
-`wiremock` for Jira/Linear HTTP. Same pattern should be used whenever a
-new external CLI or HTTP API is shelled out to.
+`IssueClient` (`src-tauri/src/issues/mod.rs`), `GitRunner`
+(`src-tauri/src/spawn/git.rs`), and `PrInspector`
+(`src-tauri/src/enrichment/mod.rs`) are traits stored as `Arc<dyn …>`
+(or constructed per-call for `IssueClient`). Production impls:
+`GhCli` / `JiraClient` / `LinearClient` for issues; `GitCli` for git;
+`GhPrInspector` for PR status. Tests substitute recording mocks so no
+real `gh` / `git` calls are made; `wiremock` handles Jira/Linear HTTP.
+Same pattern should be used whenever a new external CLI or HTTP API is
+shelled out to.
 
 ### PTY layer (`src-tauri/src/pty.rs`)
 
@@ -234,7 +252,7 @@ plugin-distribution model.
 
 ### Backend (Rust)
 
-Unit tests for the four pillars:
+Unit tests for the five pillars:
 - `registry/tests.rs` — actor command round-trips, event emission, real-PTY data flow.
 - `hooks/tests.rs` — status mapping, JSONL persistence, unknown-session drop.
 - `spawn/tests.rs` — mocks `IssueClient` and `GitRunner` to cover the
@@ -242,6 +260,9 @@ Unit tests for the four pillars:
 - `issues/tests.rs` — `wiremock`-driven coverage of the Jira/Linear HTTP
   clients (auth headers, error paths, GraphQL error handling) plus
   `sanitize_branch` and provider-factory dispatch.
+- `enrichment/tests.rs` — recording `PrInspector` mock drives the actor
+  through refresh cycles; asserts `RegistryEvent::PrStatusChange` payload,
+  dedup suppression, and session removal stopping polls.
 
 ### Frontend (Vitest + jsdom + @testing-library/preact)
 

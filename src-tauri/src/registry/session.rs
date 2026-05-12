@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::enrichment::PrStatus;
 use crate::pty::PtyHandles;
 
 use super::status::Status;
@@ -18,6 +19,7 @@ pub struct Session {
     pub issue_url: Option<String>,
     pub branch: Option<String>,
     pub repo_name: Option<String>,
+    pub pr_status: Option<PrStatus>,
 }
 
 impl Session {
@@ -33,6 +35,7 @@ impl Session {
             issue_url: self.issue_url.clone(),
             branch: self.branch.clone(),
             repo_name: self.repo_name.clone(),
+            pr_status: self.pr_status.clone(),
         }
     }
 }
