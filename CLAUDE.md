@@ -59,8 +59,8 @@ unit-tested without a Tauri runtime — tests subscribe to
 `RegistryEvent` directly.
 
 The 20-odd `#[tauri::command]` functions are split across
-`ipc/{pty,setup,repos,issues,secrets}.rs` by domain; `mod.rs` owns only
-`AppState` and the bridge.
+`ipc/{pty,setup,repos,issues,secrets,git}.rs` by domain; `mod.rs` owns
+only `AppState` and the bridge.
 
 ### Config actor (`src-tauri/src/config/`)
 

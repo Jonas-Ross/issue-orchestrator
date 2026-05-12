@@ -34,6 +34,7 @@ impl IssueClient for StubIssueClient {
 struct RecordingGit {
     branches_present: Vec<String>,
     worktrees_present: Vec<PathBuf>,
+    diff_output: String,
     calls: Mutex<Vec<String>>,
 }
 
@@ -67,6 +68,13 @@ impl GitRunner for RecordingGit {
             worktree_path.display()
         ));
         Ok(())
+    }
+    fn diff(&self, repo: &Path) -> Result<String> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("diff path={}", repo.display()));
+        Ok(self.diff_output.clone())
     }
 }
 
